@@ -907,7 +907,7 @@ riêng:
 - **Bài Muốn Nhận** (`POST /posts/:wantedPostId/offer-gift`) nhận `requestedQuantity` — số món người
   tặng mang tới, cùng luật.
 - **Hàng lẻ vẫn được tự chọn.** Duyệt chỉ xoá `selection_deadline` khi kho về 0. Còn hàng thì tới
-  hạn job `gift:auto-select` chọn tiếp người vừa số — nhiều người cho một bài trong một lượt chạy
+  hạn job `selection:auto-select` chọn tiếp người vừa số — nhiều người cho một bài trong một lượt chạy
   (trần 20) — tới khi hết hàng hoặc hết người vừa số.
 - **Nhắc người STANDBY.** Bài còn hàng mà không còn ai vừa số (đã quá hạn xét, hoặc bài chọn tay và
   họ đã chờ quá 3 ngày): job nhắc người `STANDBY` / `INSUFFICIENT_QUANTITY` giảm số lượng — một lần
