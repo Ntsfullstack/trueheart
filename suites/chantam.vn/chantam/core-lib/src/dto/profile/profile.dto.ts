@@ -90,6 +90,8 @@ export interface IUpdateOwnProfileBodyDto {
 export interface IOwnProfileDto {
   userId: string;
   username: string;
+  /** Ngày tham gia. */
+  createdAt: Date;
   fullName: string | null;
   avatarUrl: string | null;
   email: string | null;
@@ -147,6 +149,8 @@ export interface IUpdateOwnProfileResponseDto {
 /** Bản tối thiểu, tuyệt đối không có email/SĐT/vị trí mặc định/số dư tiêu được. */
 export interface IPublicProfileDto {
   username: string;
+  /** Ngày tham gia. */
+  createdAt: Date;
   fullName: string | null;
   avatarUrl: string | null;
   rank: UserRanks;

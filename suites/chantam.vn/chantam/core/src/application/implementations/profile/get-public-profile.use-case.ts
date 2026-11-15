@@ -90,6 +90,7 @@ export class GetPublicProfileUseCase implements IGetPublicProfileUseCase {
     return {
       profile: {
         username: user.username,
+        createdAt: user.createdAt,
         fullName: user.fullName,
         avatarUrl: user.avatarUrl,
         rank: user.rank,

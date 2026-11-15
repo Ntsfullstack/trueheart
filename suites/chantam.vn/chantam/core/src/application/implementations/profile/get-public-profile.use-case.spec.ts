@@ -1,5 +1,7 @@
 import { GetPublicProfileUseCase } from './get-public-profile.use-case';
 
+const JoinedAt = new Date('2026-01-15T08:30:00.000Z');
+
 function makeUser() {
   return {
     globalId: '10000000-0000-4000-8000-000000000001',
@@ -13,6 +15,7 @@ function makeUser() {
     rank: 'GOLD',
     status: 'ACTIVE',
     phoneVerifiedAt: new Date(),
+    createdAt: JoinedAt,
     suspendedUntil: null,
     deletedAt: null,
   };
@@ -63,6 +66,7 @@ describe('GetPublicProfileUseCase', () => {
 
     expect(result.profile).toEqual({
       username: 'nguoi-demo',
+      createdAt: JoinedAt,
       fullName: 'Người Demo',
       avatarUrl: 'https://cdn.example.com/avatar.png',
       badges: [],

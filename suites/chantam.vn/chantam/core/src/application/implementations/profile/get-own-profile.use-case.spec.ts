@@ -2,6 +2,7 @@ import { GetOwnProfileUseCase } from './get-own-profile.use-case';
 
 const UserId = '10000000-0000-4000-8000-000000000001';
 const ReferrerId = '20000000-0000-4000-8000-000000000002';
+const JoinedAt = new Date('2026-01-15T08:30:00.000Z');
 
 const PointSummary = { balance: 84, lifetime: 252 };
 const RankSummary = {
@@ -121,6 +122,7 @@ const ActiveUser = {
   rank: 'MEMBER',
   status: 'ACTIVE',
   phoneVerifiedAt: new Date(),
+  createdAt: JoinedAt,
   deletedAt: null,
 };
 
@@ -133,6 +135,7 @@ describe('GetOwnProfileUseCase', () => {
         profile: {
           userId: UserId,
           username: 'alice',
+          createdAt: JoinedAt,
           fullName: 'Alice',
           avatarUrl: 'https://cdn.example.com/avatar.png',
           badges: [],
