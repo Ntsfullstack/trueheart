@@ -1001,6 +1001,9 @@ báo qua `POST /transactions/:id/reports/ship-unpaid` và khoản trừ điểm 
 > ✅ Quyền **Kim Cương chọn tay** xong 11/10 qua capability `SELECT_REQUESTER`, áp ở cả
 > `accept` và `batch-accept`. Tới 10/10 capability đó đã seed mà **không ai đọc**, nên mọi chủ
 > bài đều chọn tay được. `reject` và xem danh sách vẫn mở cho mọi bậc.
+> ✅ **15/11: bài `WANTED` bỏ cổng hạng** — chủ bài Muốn Nhận ở mọi hạng chọn tay được người
+> tặng ("muốn xin của ai thì xin"); tự chọn khi hết hạn xét giữ nguyên. Cổng Kim Cương chỉ còn
+> cho người cho chọn người nhận.
 > ✅ Áp cho `WANTED` xong 11/10, **sau** khi đảo vai tặng/nhận. Vai suy từ
 > `giftTransactionRoles` (một chỗ duy nhất), và `acceptRequest` trả về vai đã phân giải nên
 > nơi gọi không đoán lại. Mục này của CHỐT-10 **đã xong cả ba việc**.

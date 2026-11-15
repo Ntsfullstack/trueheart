@@ -24,6 +24,10 @@ import {
   PostTypes,
 } from '@chantam.vn/chantam.core-lib/consts';
 import {
+  normalizePostRequirements,
+  PostTypesWithRequirements,
+} from '@chantam.vn/chantam.core-lib/models';
+import {
   ForbiddenException,
   ValidationFailedException,
 } from '@chantam/service.common-lib/exception';
@@ -124,6 +128,15 @@ export class UpdatePostUseCase implements IUpdatePostUseCase {
       throw new ValidationFailedException([
         'price, marketPrice và negotiable chỉ áp dụng cho bài CLASSIFIED',
       ]);
+    if (
+      input.requirements !== undefined &&
+      !PostTypesWithRequirements.includes(post.postType)
+    )
+      throw new ValidationFailedException([
+        'requirements chỉ áp dụng cho bài OFFER và WANTED',
+      ]);
+    // `undefined` = không gửi = không đổi; `null` hoặc chuỗi trắng = xoá.
+    const requirements = normalizePostRequirements(input.requirements);
 
     const deliveryMethod =
       input.deliveryMethod === undefined
@@ -149,7 +162,8 @@ export class UpdatePostUseCase implements IUpdatePostUseCase {
       // `!== undefined` chứ không `!= null`: `marketPrice: null` là lệnh XOÁ con số đã
       // khai, còn bỏ trống trường là "không đổi". Gộp hai thứ đó làm người bán
       // không có cách nào rút lại một giá tham khảo gõ sai.
-      input.marketPrice !== undefined;
+      input.marketPrice !== undefined ||
+      requirements !== undefined;
 
     const updated = await this.postRepository.updateOwnedContent({
       postId: command.postId,
@@ -194,6 +208,7 @@ export class UpdatePostUseCase implements IUpdatePostUseCase {
               ...(command.post.estimatedValue === undefined
                 ? {}
                 : { estimatedValue: command.post.estimatedValue }),
+              ...(requirements === undefined ? {} : { requirements }),
             },
       }),
     });

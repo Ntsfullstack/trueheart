@@ -1,5 +1,8 @@
 import { IDispatchNotificationUseCase } from '@/application/contracts/notification';
-import { NotificationTypes } from '@chantam.vn/chantam.core-lib/consts';
+import {
+  NotificationTypes,
+  PostTypes,
+} from '@chantam.vn/chantam.core-lib/consts';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 /**
@@ -64,9 +67,48 @@ export class AcceptedRequestNotifier {
     postId: string;
     transactionId: string;
     trigger: AcceptanceTrigger;
+    /**
+     * Loại bài. Chỉ cần cho đường `MANUAL`: trên bài `WANTED` người bấm chọn là người
+     * NHẬN, nên người phải được báo là người TẶNG (15/11). Bỏ trống = chiều `OFFER`.
+     */
+    postType?: PostTypes;
   }): Promise<void> {
+    if (params.trigger === 'MANUAL' && params.postType === PostTypes.WANTED) {
+      await this.notifyChosenGiver(params);
+      return;
+    }
     await this.notifyReceiver(params);
     await this.notifyGiverIfPassive(params);
+  }
+
+  /**
+   * Bài Muốn Nhận, chủ bài tự chọn: báo người tặng được chọn.
+   *
+   * Cùng loại và cùng khoá idempotency với `notifyReceiver` — một lượt trao chỉ có MỘT lần
+   * "lời của bạn được duyệt", chỉ là người được duyệt ở chiều này là người tặng. Người
+   * nhận vừa tự bấm nên không báo lại họ, cùng lý do với chủ bài `OFFER`.
+   */
+  private async notifyChosenGiver(params: {
+    giverId: string;
+    transactionId: string;
+    trigger: AcceptanceTrigger;
+  }): Promise<void> {
+    try {
+      await this.dispatchNotification.handle({
+        userId: params.giverId,
+        type: NotificationTypes.GIFT_REQUEST_ACCEPTED,
+        title: 'Lời tặng của bạn đã được nhận',
+        body: 'Người nhận đã chọn bạn làm người tặng. Cuộc trò chuyện với người nhận đã mở.',
+        referenceType: 'GIFT_TRANSACTION',
+        referenceId: params.transactionId,
+        idempotencyKey: `GIFT_REQUEST_ACCEPTED:${params.transactionId}`,
+        variables: { trigger: params.trigger },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Không báo được cho người tặng ${params.giverId}: ${String(error)}`,
+      );
+    }
   }
 
   private async notifyReceiver(params: {

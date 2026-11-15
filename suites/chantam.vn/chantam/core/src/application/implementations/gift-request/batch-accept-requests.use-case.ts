@@ -13,6 +13,7 @@ import {
   IGiftRequestRepository,
   IPostRepository,
 } from '@/domain/ports/repository';
+import { PostTypes } from '@chantam.vn/chantam.core-lib/consts';
 import { MaxBatchAcceptRequests } from '@chantam.vn/chantam.core-lib/models';
 import { ValidationFailedException } from '@chantam/service.common-lib/exception';
 import { Inject, Injectable, Optional } from '@nestjs/common';
@@ -55,15 +56,28 @@ export class BatchAcceptRequestsUseCase implements IBatchAcceptRequestsUseCase {
   public async handle(
     command: IBatchAcceptRequestsCommand,
   ): Promise<IBatchAcceptRequestsResult> {
+    // Đọc bài TRƯỚC cổng: cổng giờ phụ thuộc loại bài (15/11). Bài là dữ liệu công khai,
+    // nên trả `PostNotFound` trước cổng không lộ thêm điều gì.
+    const post = await this.postRepository.findOneBy({
+      globalId: command.postId,
+    });
+    if (!post || post.deletedAt)
+      throw new PostNotFoundException(command.postId);
+
     // Kiểm quyền TRƯỚC mọi phép kiểm hình dữ liệu. Thứ tự này có nghĩa: người không
     // có quyền chọn tay thì nhận cùng một câu trả lời dù họ gửi lô hợp lệ hay lô
     // rỗng, nên họ không dò được gì từ thông điệp lỗi.
-    const selectCapability = await this.entitlementRepository.getCapability(
-      command.userId,
-      SelectRequesterCapability,
-    );
-    if (!selectCapability?.allowed) {
-      throw new SelectRequesterNotAllowedException();
+    //
+    // Bài Muốn Nhận KHÔNG qua cổng — xem `AcceptGiftRequestUseCase`. Chủ bài vẫn bị
+    // repository kiểm dưới khoá hàng, nên bỏ cổng không mở đường cho người ngoài.
+    if (post.postType !== PostTypes.WANTED) {
+      const selectCapability = await this.entitlementRepository.getCapability(
+        command.userId,
+        SelectRequesterCapability,
+      );
+      if (!selectCapability?.allowed) {
+        throw new SelectRequesterNotAllowedException();
+      }
     }
 
     const requestIds = command.requestIds ?? [];
@@ -89,11 +103,6 @@ export class BatchAcceptRequestsUseCase implements IBatchAcceptRequestsUseCase {
 
     // Cùng luật với duyệt từng cái: Rao vặt không tạo lượt trao mới (PR #46 §8). Repository
     // còn chặn lần nữa dưới khoá hàng; ở đây để trả đúng mã lỗi trước khi mở transaction.
-    const post = await this.postRepository.findOneBy({
-      globalId: command.postId,
-    });
-    if (!post || post.deletedAt)
-      throw new PostNotFoundException(command.postId);
     await assertClassifiedTransactionsAllowed(post, this.adminConfig);
 
     const outcome = await this.giftRequestRepository.acceptRequestsBatch({
@@ -116,6 +125,8 @@ export class BatchAcceptRequestsUseCase implements IBatchAcceptRequestsUseCase {
         transactionId: item.transactionId,
         // Chủ bài tự bấm, y như duyệt từng cái — nên KHÔNG báo lại cho họ.
         trigger: 'MANUAL',
+        // Bài Muốn Nhận: người bấm là người NHẬN, người cần báo là người TẶNG (15/11).
+        postType: post.postType,
       });
 
     await this.lifecycleNotifier?.announceRebalanced(outcome.rebalanced ?? []);

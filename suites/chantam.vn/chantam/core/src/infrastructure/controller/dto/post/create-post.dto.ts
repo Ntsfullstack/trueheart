@@ -12,7 +12,10 @@ import {
   ICreatePostResponseDto,
 } from '@chantam.vn/chantam.core-lib/dto';
 import { IPostEntity } from '@chantam.vn/chantam.core-lib/entities';
-import { MaxClassifiedPrice } from '@chantam.vn/chantam.core-lib/models';
+import {
+  MaxClassifiedPrice,
+  MaxPostRequirementsLength,
+} from '@chantam.vn/chantam.core-lib/models';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -25,6 +28,7 @@ import {
   IsUUID,
   Length,
   Max,
+  MaxLength,
   Min,
   ValidateIf,
   ValidateNested,
@@ -77,6 +81,19 @@ export class CreatePostDto implements ICreatePostDto {
   @Min(0)
   @Max(MaxEstimatedValue)
   estimatedValue?: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: MaxPostRequirementsLength,
+    example: 'Ưu tiên sinh viên, tự đến lấy',
+    description:
+      'Điều kiện cho/nhận do người đăng tự ghi. Chỉ áp dụng cho bài OFFER và WANTED — loại khác gửi lên bị 400. Cắt khoảng trắng hai đầu; chuỗi trắng lưu thành null. Đọc lại ở `post.details.requirements`. KHÁC `condition` (tình trạng món đồ).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MaxPostRequirementsLength)
+  requirements?: string | null;
 
   @ApiPropertyOptional({
     minimum: 0,

@@ -133,6 +133,7 @@ describe('BatchAcceptRequestsUseCase', () => {
       postId: PostId,
       transactionId: 'tx-a',
       trigger: 'MANUAL',
+      postType: 'OFFER',
     });
     expect(deps.notifier.announce).toHaveBeenCalledWith(
       expect.objectContaining({ receiverId: UserB, transactionId: 'tx-b' }),
@@ -285,5 +286,34 @@ describe('BatchAcceptRequestsUseCase · quyền chọn tay (CHỐT-10)', () => {
     await expect(
       build(deps).handle({ postId: PostId, userId: GiverId, requestIds: [] }),
     ).rejects.toBeInstanceOf(SelectRequesterNotAllowedException);
+  });
+
+  it('chủ bài WANTED dưới Kim Cương duyệt lô được (15/11)', async () => {
+    // Người xin muốn xin của ai thì xin: trên bài Muốn Nhận, chủ bài là người NHẬN
+    // đang chọn người tặng — cổng Kim Cương không áp.
+    const deps = makeDeps(undefined, 'WANTED');
+    deps.entitlements.getCapability = jest.fn(
+      async (_userId: string, code: string) => ({
+        code,
+        allowed: false,
+        limit: 0,
+        used: null,
+        remaining: null,
+        reasonCode: null,
+      }),
+    );
+
+    await build(deps).handle({
+      postId: PostId,
+      userId: GiverId,
+      requestIds: [ReqA],
+    });
+
+    expect(deps.repo.acceptRequestsBatch).toHaveBeenCalledTimes(1);
+    expect(deps.entitlements.getCapability).not.toHaveBeenCalled();
+    // Notifier phải biết loại bài để báo đúng người tặng, không báo người vừa bấm.
+    expect(deps.notifier.announce).toHaveBeenCalledWith(
+      expect.objectContaining({ postType: 'WANTED', trigger: 'MANUAL' }),
+    );
   });
 });

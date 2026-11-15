@@ -249,8 +249,8 @@ describe('AcceptGiftRequestUseCase', () => {
 });
 
 describe('AcceptGiftRequestUseCase · quyền chọn tay (CHỐT-10)', () => {
-  function build(allowed: boolean) {
-    const post = makePost();
+  function build(allowed: boolean, overrides: Partial<IPostEntity> = {}) {
+    const post = makePost(overrides);
     const postRepo = {
       findOneBy: jest.fn().mockResolvedValue(post),
     } as unknown as jest.Mocked<IPostRepository>;
@@ -261,15 +261,17 @@ describe('AcceptGiftRequestUseCase · quyền chọn tay (CHỐT-10)', () => {
     const caps = entitlements(allowed) as unknown as {
       getCapability: jest.Mock;
     };
+    const announcer = notifier() as unknown as { announce: jest.Mock };
     return {
       useCase: new AcceptGiftRequestUseCase(
         postRepo,
         giftRequestRepo,
         caps as never,
-        notifier(),
+        announcer as never,
       ),
       giftRequestRepo,
       caps,
+      announcer,
     };
   }
 
@@ -317,6 +319,64 @@ describe('AcceptGiftRequestUseCase · quyền chọn tay (CHỐT-10)', () => {
     ).rejects.toThrow();
 
     expect(giftRequestRepo.findOneBy).not.toHaveBeenCalled();
+  });
+
+  it('chủ bài WANTED dưới Kim Cương vẫn chọn tay được người tặng (15/11)', async () => {
+    // Người xin muốn xin của ai thì xin: cổng Kim Cương chỉ dành cho người CHO chọn
+    // người nhận. Trên bài Muốn Nhận, chủ bài là người nhận đang chọn người tặng.
+    const { useCase, giftRequestRepo, caps } = build(false, {
+      postType: 'WANTED' as never,
+    });
+
+    await expect(
+      useCase.handle({
+        postId: PostId,
+        requestId: RequestId,
+        userId: AuthorId,
+      }),
+    ).resolves.toMatchObject({ status: GiftRequestStatuses.ACCEPTED });
+
+    expect(giftRequestRepo.acceptRequest).toHaveBeenCalled();
+    expect(caps.getCapability).not.toHaveBeenCalled();
+  });
+
+  it('bài WANTED: báo với vai đã đảo — người xin là người TẶNG (15/11)', async () => {
+    const { useCase, announcer } = build(false, {
+      postType: 'WANTED' as never,
+    });
+
+    await useCase.handle({
+      postId: PostId,
+      requestId: RequestId,
+      userId: AuthorId,
+    });
+
+    expect(announcer.announce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        giverId: RequesterId,
+        receiverId: AuthorId,
+        postType: 'WANTED',
+        trigger: 'MANUAL',
+      }),
+    );
+  });
+
+  it('bài OFFER: chủ bài là người tặng, người xin là người nhận', async () => {
+    const { useCase, announcer } = build(true);
+
+    await useCase.handle({
+      postId: PostId,
+      requestId: RequestId,
+      userId: AuthorId,
+    });
+
+    expect(announcer.announce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        giverId: AuthorId,
+        receiverId: RequesterId,
+        postType: 'OFFER',
+      }),
+    );
   });
 
   it('đọc đúng mã capability SELECT_REQUESTER', async () => {

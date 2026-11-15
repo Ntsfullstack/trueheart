@@ -25,7 +25,9 @@ import {
 } from '@chantam.vn/chantam.core-lib/consts';
 import {
   classifiedPricingGaps,
+  normalizePostRequirements,
   postExpiryDateFor,
+  PostTypesWithRequirements,
   resolveQuotaLimit,
   selectionDeadlineFrom,
   usesSelectionLifecycle,
@@ -46,7 +48,18 @@ function buildPostDetails(
   post: ICreatePostCommand['post'],
 ): Record<string, unknown> {
   if (post.postType === PostTypes.OFFER)
-    return { condition: post.condition, estimatedValue: post.estimatedValue };
+    return {
+      condition: post.condition,
+      estimatedValue: post.estimatedValue,
+      requirements: normalizePostRequirements(post.requirements) ?? null,
+    };
+
+  // Bài Muốn xin chỉ có điều kiện nhận (15/11). Khoá luôn có mặt, `null` khi không khai —
+  // cùng lý do với `marketPrice` bên dưới.
+  if (post.postType === PostTypes.WANTED)
+    return {
+      requirements: normalizePostRequirements(post.requirements) ?? null,
+    };
 
   if (post.postType === PostTypes.CLASSIFIED)
     return {
@@ -114,6 +127,14 @@ export class CreatePostUseCase implements ICreatePostUseCase {
     if (post.postType !== PostTypes.OFFER && post.estimatedValue !== undefined)
       throw new ValidationFailedException([
         'estimatedValue chỉ áp dụng cho bài OFFER',
+      ]);
+
+    if (
+      !PostTypesWithRequirements.includes(post.postType) &&
+      post.requirements !== undefined
+    )
+      throw new ValidationFailedException([
+        'requirements chỉ áp dụng cho bài OFFER và WANTED',
       ]);
 
     // Giá và cờ thương lượng chỉ có nghĩa với tin rao bán. Lọt sang bài tặng

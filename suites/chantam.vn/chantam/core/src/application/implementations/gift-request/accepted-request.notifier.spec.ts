@@ -1,4 +1,7 @@
-import { NotificationTypes } from '@chantam.vn/chantam.core-lib/consts';
+import {
+  NotificationTypes,
+  PostTypes,
+} from '@chantam.vn/chantam.core-lib/consts';
 import { AcceptedRequestNotifier } from './accepted-request.notifier';
 
 function makeNotifier(handle = jest.fn(async () => ({ created: true }))) {
@@ -16,6 +19,30 @@ const base = {
 };
 
 describe('AcceptedRequestNotifier', () => {
+  it('bài WANTED duyệt tay: báo NGƯỜI TẶNG được chọn, không báo người nhận vừa bấm (15/11)', async () => {
+    // Trên bài Muốn Nhận, chủ bài là người NHẬN và chính họ bấm chọn. Người cần biết là
+    // người tặng — trước đây batch-accept báo ngược lại cho người vừa bấm.
+    const { notifier, handle } = makeNotifier();
+
+    await notifier.announce({
+      ...base,
+      trigger: 'MANUAL',
+      postType: PostTypes.WANTED,
+    });
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle).toHaveBeenCalledWith({
+      userId: 'giver-1',
+      type: NotificationTypes.GIFT_REQUEST_ACCEPTED,
+      title: 'Lời tặng của bạn đã được nhận',
+      body: 'Người nhận đã chọn bạn làm người tặng. Cuộc trò chuyện với người nhận đã mở.',
+      referenceType: 'GIFT_TRANSACTION',
+      referenceId: 'deal-1',
+      idempotencyKey: 'GIFT_REQUEST_ACCEPTED:deal-1',
+      variables: { trigger: 'MANUAL' },
+    });
+  });
+
   it('chủ bài tự duyệt: chỉ báo người nhận, không báo lại chủ bài', async () => {
     const { notifier, handle } = makeNotifier();
 

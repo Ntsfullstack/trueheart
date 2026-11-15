@@ -336,3 +336,54 @@ describe('UpdatePostUseCase', () => {
     expect(posts.updateOwnedContent).toHaveBeenCalled();
   });
 });
+
+describe('UpdatePostUseCase · điều kiện cho/nhận `requirements` (15/11)', () => {
+  const update = (useCase: UpdatePostUseCase, post: Record<string, unknown>) =>
+    useCase.handle({ postId: PostId, userId: AuthorId, post } as never);
+
+  it('OFFER đổi requirements, giữ các khoá details khác', async () => {
+    const { useCase, posts } = setup();
+
+    await update(useCase, { requirements: '  Tự đến lấy  ' });
+
+    expect(posts.updateOwnedContent.mock.calls[0][0].changes.details).toEqual({
+      condition: 'USED',
+      estimatedValue: 1_500_000,
+      requirements: 'Tự đến lấy',
+    });
+  });
+
+  it('WANTED gửi null thì xoá requirements', async () => {
+    const { useCase, posts } = setup({
+      postType: PostTypes.WANTED,
+      details: { requirements: 'Cũ' },
+    });
+
+    await update(useCase, { requirements: null });
+
+    expect(posts.updateOwnedContent.mock.calls[0][0].changes.details).toEqual({
+      requirements: null,
+    });
+  });
+
+  it('không gửi requirements thì details không bị đụng tới', async () => {
+    const { useCase, posts } = setup({
+      details: { condition: 'USED', requirements: 'Giữ nguyên' },
+    });
+
+    await update(useCase, { title: 'Xe đạp cũ còn tốt' });
+
+    expect(
+      posts.updateOwnedContent.mock.calls[0][0].changes.details,
+    ).toBeUndefined();
+  });
+
+  it('bài CLASSIFIED gửi requirements thì bị từ chối', async () => {
+    const { useCase, posts } = setup({ postType: PostTypes.CLASSIFIED });
+
+    await expect(
+      update(useCase, { requirements: 'Không mặc cả' }),
+    ).rejects.toThrow('requirements chỉ áp dụng cho bài OFFER và WANTED');
+    expect(posts.updateOwnedContent).not.toHaveBeenCalled();
+  });
+});

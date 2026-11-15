@@ -100,6 +100,11 @@ export interface ICreatePostDto extends ICreatePostCommonDto {
   negotiable?: boolean;
   /** Chế độ tìm người nhận — chỉ áp dụng cho bài OFFER, mặc định OPTIMAL. */
   selectionMode?: PostSelectionModes;
+  /**
+   * Điều kiện cho/nhận do người đăng tự ghi (15/11), tối đa 500 ký tự. Chỉ bài OFFER và
+   * WANTED. Lưu ở `details.requirements`; chuỗi trắng = `null`.
+   */
+  requirements?: string | null;
 }
 
 export interface ICreatePostBodyDto {
@@ -569,6 +574,8 @@ export interface IUpdatePostDto {
   condition?: GiftPostConditions;
   estimatedValue?: number;
   location?: IGeoPoint;
+  /** Điều kiện cho/nhận (15/11). Bỏ trống = giữ nguyên; `null`/chuỗi trắng = xoá. */
+  requirements?: string | null;
 }
 
 export interface IUpdatePostParamsDto {

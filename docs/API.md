@@ -399,6 +399,7 @@ Lưu trong `details` (JSONB). Mỗi loại chỉ mang đúng trường của mì
 | Loại | Trường | Bắt buộc |
 | --- | --- | --- |
 | `OFFER` | `condition`, `estimatedValue`, `totalQuantity` | Không |
+| `OFFER`, `WANTED` | `requirements` (điều kiện cho/nhận, chuỗi ≤ 500 ký tự) | Không — không gửi thì lưu `null` |
 | `CLASSIFIED` | `price` (VND), `condition` | **Có** |
 | `CLASSIFIED` | `negotiable` | Không — mặc định `false` |
 | `CLASSIFIED` | `marketPrice` (VND, giá thị trường tham khảo) | Không |
@@ -415,6 +416,12 @@ Mặc định `negotiable = false` vì hiểu im lặng thành "có thương lư
 một điều họ không nói.
 
 `totalQuantity` chỉ có nghĩa với `OFFER`; các loại khác bị ép về 1.
+
+**`requirements` — điều kiện cho/nhận (15/11).** Chuỗi tự do người đăng ghi, ví dụ "Ưu tiên
+sinh viên, tự đến lấy". Gửi ở `post.requirements`, đọc lại ở `post.details.requirements`. Server
+cắt khoảng trắng hai đầu, chuỗi trắng lưu thành `null`. Loại bài khác `OFFER`/`WANTED` gửi lên thì
+`400 VALIDATION_FAILED`. **Khác `condition`**: `condition` là tình trạng món đồ
+(`NEW`/`LIKE_NEW`/`USED`…). Bài đăng trước 15/11 có thể không có khoá này — coi như `null`.
 
 `selectionMode` ([F79](./FEATURES.md#f79--chế-độ-tìm-người-nhận-selection-modes)) nhận `INSTANT` (chốt ngay phản hồi đầu tiên) hoặc `OPTIMAL` (mặc định, xét tới hết hạn rồi chọn). `EXTENDED` **đã bỏ** 11/10 (CHỐT-10) — 30 ngày mở rộng nay là bước TỰ ĐỘNG cho mọi bài chưa ghép được ai, không còn là ô trên form.
 
@@ -483,6 +490,7 @@ theo loại. `postType`, `status`, `authorId` và hạn đăng vẫn do server g
 | `price`, `negotiable` | `CLASSIFIED` | — |
 | `estimatedValue` | `OFFER` | — |
 | `condition` | `OFFER` và `CLASSIFIED` | — |
+| `requirements` | `OFFER` và `WANTED` | Bỏ trống = giữ nguyên; `null` hoặc chuỗi trắng = xoá; ≤ 500 ký tự |
 | `categoryId` | mọi loại | Danh mục phải tồn tại và đang bật, nếu không `CATEGORY_NOT_FOUND` |
 | `isSos` | mọi loại | Bật lên cần quyền `POST_SOS`, nếu không `POST_SOS_NOT_ALLOWED` |
 
@@ -734,9 +742,14 @@ không, `me` bị nuốt thành một `postId` và route tĩnh không bao giờ 
 | `GET` | `/requests/:requestId` | Bearer (người xin hoặc chủ bài) | Một yêu cầu — đích mở từ thông báo (mục 9) |
 | `GET` | `/posts/:postId/requests` | Bearer (chỉ tác giả) | Danh sách người xin, có phân trang |
 | `POST` | `/posts/:postId/requests/:requestId/reject` | Bearer (chỉ tác giả) | **Từ chối** một yêu cầu đang `PENDING`/`STANDBY` |
-| `POST` | `/posts/:postId/requests/:requestId/accept` | Bearer (chỉ tác giả **và** đủ hạng) | Duyệt một người xin — xem khung dưới |
-| `POST` | `/posts/:postId/batch-accept` | Bearer (chỉ tác giả **và** đủ hạng) | Duyệt **nhiều** người trong MỘT transaction — hoặc hết, hoặc không ai |
+| `POST` | `/posts/:postId/requests/:requestId/accept` | Bearer (chỉ tác giả; bài không phải `WANTED` thì **và** đủ hạng) | Duyệt một người xin — xem khung dưới |
+| `POST` | `/posts/:postId/batch-accept` | Bearer (chỉ tác giả; bài không phải `WANTED` thì **và** đủ hạng) | Duyệt **nhiều** người trong MỘT transaction — hoặc hết, hoặc không ai |
 
+> **Từ 15/11: bài `WANTED` không qua cổng hạng.** Người xin muốn xin của ai thì xin — chủ bài
+> Muốn Nhận ở **mọi hạng** chọn tay được người tặng qua cả `accept` lẫn `batch-accept`. Không
+> chọn thì hết hạn xét hệ thống vẫn tự chọn như cũ. Cổng dưới đây chỉ còn áp cho người **cho**
+> chọn người nhận.
+>
 > **Chọn tay đòi quyền `SELECT_REQUESTER`, từ 11/10 (CHỐT-10).** Mặc định chỉ **Kim Cương**
 > được tự chọn người nhận; bậc dưới nhận `SELECT_REQUESTER_NOT_ALLOWED` (403) và hệ thống tự
 > chọn khi hết hạn xét.
