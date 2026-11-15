@@ -3,8 +3,8 @@
 > **File sinh tự động** bởi `npm run docs:routes` từ metadata của controller đã biên dịch.
 > Đừng sửa tay — sửa controller rồi chạy lại lệnh. CI chạy `docs:routes:check`.
 
-Tiền tố chung: `/api/v1` (riêng `/health` nằm ngoài tiền tố). Tổng **435** route:
-59 công khai, 141 cần quyền Admin, 235 cần access token.
+Tiền tố chung: `/api/v1` (riêng `/health` nằm ngoài tiền tố). Tổng **438** route:
+59 công khai, 141 cần quyền Admin, 238 cần access token.
 
 Mức truy cập: `Công khai` = không cần token; `Bearer` = cần access token (một số route còn
 kiểm chủ sở hữu hoặc quyền RBAC trong use case — xem `docs/API.md`); `perm:<mã>` = quyền Admin
@@ -481,6 +481,9 @@ kiểm bởi guard. Chi tiết request/response ở Swagger (`/docs`) và `docs/
 | `PUT` | `/charity-campaigns/:id/profile` | Bearer | Lời kêu gọi và loại kêu gọi tham gia |
 | `PATCH` | `/charity-campaigns/:id/progress` | Bearer | Cập nhật số phần quà đã trao |
 | `POST` | `/charity-campaigns/:id/promotion-request` | Bearer | Đề xuất lên card Home |
+| `GET` | `/charity-campaigns/:id/promotions` | Bearer | Đề xuất lên trang chủ của hoạt động |
+| `POST` | `/charity-campaigns/:id/promotions` | Bearer | Đề xuất quảng bá hoạt động lên trang chủ |
+| `PATCH` | `/charity-campaigns/:id/promotions/:promotionId` | Bearer | Sửa đề xuất lên trang chủ |
 | `GET` | `/charity-campaigns/:id/reactions` | Công khai | Ai đã bày tỏ cảm xúc với dự án |
 | `PUT` | `/charity-campaigns/:id/reactions/me` | Bearer | Thích / bày tỏ cảm xúc với dự án |
 | `DELETE` | `/charity-campaigns/:id/reactions/me` | Bearer | Gỡ cảm xúc của mình khỏi dự án |

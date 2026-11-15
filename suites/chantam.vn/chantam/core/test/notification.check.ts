@@ -250,9 +250,9 @@ async function main(): Promise<void> {
     );
     check(
       'bài WANTED sắp hết hạn thì KHÔNG nhắc gia hạn',
-      !(
-        await posts.findPostsExpiringSoon({ withinDays: 7, limit: 100 })
-      ).some((row) => row.postId === WantedPostId),
+      !(await posts.findPostsExpiringSoon({ withinDays: 7, limit: 100 })).some(
+        (row) => row.postId === WantedPostId,
+      ),
     );
     await dataSource.query(`DELETE FROM posts WHERE global_id = $1`, [
       WantedPostId,
