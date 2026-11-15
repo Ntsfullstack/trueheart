@@ -1,3 +1,4 @@
+import * as banner from './sponsor-banner';
 import {
   BannerPlacements,
   MaxBannerPartnerNameLength,
@@ -175,5 +176,76 @@ describe('bannerGaps', () => {
     expect(
       bannerGaps(validInput({ startsAt: new Date('khong-phai-ngay') })),
     ).toContain('startsAt không phải thời điểm hợp lệ');
+  });
+});
+
+describe('đề xuất chiến dịch lên trang chủ (15/11)', () => {
+  it('APP_SPLASH là một vị trí hợp lệ, có nhãn', () => {
+    expect(banner.BannerPlacements).toContain('APP_SPLASH');
+    expect(banner.BannerPlacementLabels.APP_SPLASH).toBe('Poster sau màn chờ');
+  });
+
+  it.each([
+    ['APP_SPLASH', 'FULLSCREEN', true],
+    ['APP_SPLASH', 'BANNER', false],
+    ['HOME_HERO', 'FULLSCREEN', false],
+    ['HOME_HERO', 'SLIDER', true],
+    ['DHARMA_HOME', 'FLOATING', true],
+    ['HOME_INLINE', 'POPUP', false],
+  ] as const)('cặp %s + %s hợp lệ = %s', (placement, displayType, ok) => {
+    expect(
+      banner.bannerDisplayTypeGaps(placement, displayType).length === 0,
+    ).toBe(ok);
+  });
+
+  it('kiểu mặc định theo vị trí', () => {
+    expect(banner.defaultBannerDisplayType('HOME_HERO')).toBe('SLIDER');
+    expect(banner.defaultBannerDisplayType('APP_SPLASH')).toBe('FULLSCREEN');
+    expect(banner.defaultBannerDisplayType('POST_LIST')).toBe('BANNER');
+  });
+
+  it.each([
+    [5, 5],
+    [1, 1],
+    [20, 20],
+    [0, 3],
+    [21, 3],
+    [2.5, 3],
+    ['4', 3],
+    [null, 3],
+  ])('mốc đề xuất %p → %p', (value, expected) => {
+    expect(banner.normalizeCampaignPromotionMaxOpen(value)).toBe(expected);
+  });
+
+  it('link do server dựng trỏ về chiến dịch và là một target hợp lệ', () => {
+    const url = banner.campaignPromotionTargetUrl('abc');
+    expect(url).toBe('chantam://campaign/abc');
+    expect(isBannerTargetUrl(url)).toBe(true);
+  });
+
+  it('trạng thái hiển thị suy theo đúng thứ tự ưu tiên', () => {
+    const now = new Date('2026-11-15T00:00:00.000Z');
+    const base = {
+      approvalStatus: 'APPROVED' as const,
+      isActive: true,
+      startsAt: new Date(now.getTime() - Hour),
+      endsAt: new Date(now.getTime() + Hour),
+      now,
+    };
+    const state = banner.campaignPromotionServingState;
+    expect(state({ ...base, approvalStatus: 'PENDING_APPROVAL' })).toBe(
+      'PENDING',
+    );
+    expect(state({ ...base, approvalStatus: 'REJECTED' })).toBe('REJECTED');
+    expect(state({ ...base, isActive: false })).toBe('INACTIVE');
+    expect(state({ ...base, endsAt: now })).toBe('EXPIRED');
+    expect(
+      state({
+        ...base,
+        startsAt: new Date(now.getTime() + Hour),
+        endsAt: new Date(now.getTime() + 2 * Hour),
+      }),
+    ).toBe('SCHEDULED');
+    expect(state(base)).toBe('RUNNING');
   });
 });

@@ -1557,6 +1557,34 @@ export const CoreErrors = defineErrorCatalog(ErrorOrigin, {
     message: () => 'Banner này không còn được hiển thị',
   },
 
+  CAMPAIGN_PROMOTION_NOT_ELIGIBLE: {
+    code: ErrorCodes.CAMPAIGN_PROMOTION_NOT_ELIGIBLE,
+    httpStatus: HttpStatus.CONFLICT,
+    message: () =>
+      'Chỉ hoạt động đã được duyệt và đang mở mới đề xuất lên trang chủ được',
+  },
+
+  CAMPAIGN_PROMOTION_LIMIT_REACHED: {
+    code: ErrorCodes.CAMPAIGN_PROMOTION_LIMIT_REACHED,
+    httpStatus: HttpStatus.CONFLICT,
+    message: (max: number) =>
+      `Mỗi hoạt động chỉ có tối đa ${max} đề xuất đang chờ duyệt hoặc đang chạy`,
+    sample: [3],
+  },
+
+  CAMPAIGN_PROMOTION_NOT_FOUND: {
+    code: ErrorCodes.CAMPAIGN_PROMOTION_NOT_FOUND,
+    httpStatus: HttpStatus.NOT_FOUND,
+    message: () => 'Không tìm thấy đề xuất của hoạt động này',
+  },
+
+  SPONSOR_BANNER_CHANGED_SINCE_VIEWED: {
+    code: ErrorCodes.SPONSOR_BANNER_CHANGED_SINCE_VIEWED,
+    httpStatus: HttpStatus.CONFLICT,
+    message: () =>
+      'Nội dung banner vừa được sửa sau khi bạn mở — tải lại để xem bản mới rồi duyệt',
+  },
+
   MERIT_UNIT_NOT_FOUND: {
     code: ErrorCodes.MERIT_UNIT_NOT_FOUND,
     httpStatus: HttpStatus.NOT_FOUND,

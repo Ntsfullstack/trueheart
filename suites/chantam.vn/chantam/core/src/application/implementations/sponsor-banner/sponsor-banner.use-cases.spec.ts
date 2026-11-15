@@ -1,4 +1,6 @@
 import {
+  SponsorBannerApprovalAlreadyDecidedException,
+  SponsorBannerChangedSinceViewedException,
   SponsorBannerNotFoundException,
   SponsorBannerNotServingException,
 } from '@/domain/exceptions';
@@ -13,6 +15,8 @@ import {
 } from '@chantam/service.common-lib/exception';
 import {
   CreateSponsorBannerUseCase,
+  DecideSponsorBannerApprovalUseCase,
+  ListAdminSponsorBannersUseCase,
   RecordBannerClickUseCase,
   ServeSponsorBannersUseCase,
   UpdateSponsorBannerUseCase,
@@ -25,6 +29,10 @@ function banner(overrides: Partial<ISponsorBanner> = {}): ISponsorBanner {
   const startsAt = new Date(Date.now() - Hour);
   return {
     globalId: 'banner-1',
+    sourceType: 'SPONSORED',
+    sourceId: null,
+    requestedBy: null,
+    displayType: 'SLIDER',
     partnerName: 'Công ty TNHH An Lạc',
     partnerContact: 'lienhe@anlac.vn',
     title: 'Mùa Vu Lan An Lạc',
@@ -52,7 +60,9 @@ function banner(overrides: Partial<ISponsorBanner> = {}): ISponsorBanner {
 function makeRepository(): jest.Mocked<ISponsorBannerRepository> {
   return {
     create: jest.fn().mockResolvedValue(banner()),
-    findByGlobalId: jest.fn(),
+    // Lượt sửa đọc hàng đang lưu trước (cặp vị trí–kiểu sau khi trộn, khoá trường của hàng
+    // CAMPAIGN). Mặc định trả một banner đối tác hợp lệ.
+    findByGlobalId: jest.fn().mockResolvedValue(banner()),
     findServing: jest.fn().mockResolvedValue([]),
     listForAdmin: jest.fn(),
     update: jest.fn(),
@@ -61,6 +71,10 @@ function makeRepository(): jest.Mocked<ISponsorBannerRepository> {
     softDelete: jest.fn(),
     recordImpressions: jest.fn().mockResolvedValue(undefined),
     recordClick: jest.fn(),
+    createCampaignPromotion: jest.fn(),
+    listByCampaign: jest.fn(),
+    findCampaignPromotion: jest.fn(),
+    updateCampaignPromotion: jest.fn(),
   } as unknown as jest.Mocked<ISponsorBannerRepository>;
 }
 
@@ -237,6 +251,7 @@ describe('UpdateSponsorBannerUseCase', () => {
 
   it('banner không tồn tại thì NotFound', async () => {
     const repository = makeRepository();
+    repository.findByGlobalId.mockResolvedValue(null);
     repository.update.mockResolvedValue(null);
 
     await expect(
@@ -246,6 +261,215 @@ describe('UpdateSponsorBannerUseCase', () => {
         title: 'x',
       }),
     ).rejects.toThrow(SponsorBannerNotFoundException);
+  });
+});
+
+describe('Banner nguồn và kiểu hiển thị (15/11)', () => {
+  it('Admin tạo không gửi displayType -> mặc định theo vị trí, nguồn mặc định SPONSORED', async () => {
+    const repository = makeRepository();
+
+    await new CreateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+      actorUserId: ActorId,
+      ...writeInput({ placement: 'HOME_HERO' }),
+    });
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayType: 'SLIDER',
+        sourceType: 'SPONSORED',
+      }),
+    );
+  });
+
+  it('Admin tạo chọn nguồn ADMIN được', async () => {
+    const repository = makeRepository();
+
+    await new CreateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+      actorUserId: ActorId,
+      ...writeInput({ sourceType: 'ADMIN', displayType: 'BANNER' }),
+    });
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceType: 'ADMIN', displayType: 'BANNER' }),
+    );
+  });
+
+  it.each([
+    [{ placement: 'APP_SPLASH', displayType: 'BANNER' }],
+    [{ placement: 'HOME_HERO', displayType: 'FULLSCREEN' }],
+    [{ sourceType: 'CAMPAIGN' }],
+  ])('Admin tạo với %p -> 400, không ghi gì', async (overrides) => {
+    const repository = makeRepository();
+
+    await expect(
+      new CreateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+        actorUserId: ActorId,
+        ...writeInput(overrides),
+      }),
+    ).rejects.toThrow(ValidationFailedException);
+    expect(repository.create).not.toHaveBeenCalled();
+  });
+
+  it('[RF3] sửa một phần chỉ đổi placement sang APP_SPLASH trên hàng BANNER -> 400', async () => {
+    const repository = makeRepository();
+    repository.findByGlobalId.mockResolvedValue(
+      banner({ placement: 'HOME_INLINE', displayType: 'BANNER' }),
+    );
+
+    await expect(
+      new UpdateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+        actorUserId: ActorId,
+        bannerId: 'banner-1',
+        placement: 'APP_SPLASH',
+      }),
+    ).rejects.toThrow(ValidationFailedException);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('đổi cả placement APP_SPLASH lẫn displayType FULLSCREEN thì được', async () => {
+    const repository = makeRepository();
+    repository.update.mockResolvedValue(banner());
+
+    await new UpdateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+      actorUserId: ActorId,
+      bannerId: 'banner-1',
+      placement: 'APP_SPLASH',
+      displayType: 'FULLSCREEN',
+    });
+
+    expect(repository.update).toHaveBeenCalledWith({
+      bannerId: 'banner-1',
+      changes: { placement: 'APP_SPLASH', displayType: 'FULLSCREEN' },
+    });
+  });
+
+  it.each(['targetUrl', 'partnerName', 'partnerContact'])(
+    'hàng CAMPAIGN: Admin không đổi được %s',
+    async (field) => {
+      const repository = makeRepository();
+      repository.findByGlobalId.mockResolvedValue(
+        banner({ sourceType: 'CAMPAIGN', sourceId: 'campaign-1' }),
+      );
+
+      await expect(
+        new UpdateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+          actorUserId: ActorId,
+          bannerId: 'banner-1',
+          [field]: field === 'targetUrl' ? 'https://khac.vn' : 'Đối tác khác',
+        }),
+      ).rejects.toThrow(ValidationFailedException);
+      expect(repository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('hàng CAMPAIGN: Admin đổi thứ tự được, không đụng trạng thái duyệt', async () => {
+    const repository = makeRepository();
+    repository.findByGlobalId.mockResolvedValue(
+      banner({ sourceType: 'CAMPAIGN', sourceId: 'campaign-1' }),
+    );
+    repository.update.mockResolvedValue(banner());
+
+    await new UpdateSponsorBannerUseCase(repository, makeAdmin(true)).handle({
+      actorUserId: ActorId,
+      bannerId: 'banner-1',
+      displayOrder: 7,
+    });
+
+    expect(repository.update).toHaveBeenCalledWith({
+      bannerId: 'banner-1',
+      changes: { displayOrder: 7 },
+    });
+  });
+
+  it('danh sách Admin chuyển lọc nguồn và chiến dịch xuống repository', async () => {
+    const repository = makeRepository();
+    repository.listForAdmin.mockResolvedValue({ items: [], total: 0 });
+
+    await new ListAdminSponsorBannersUseCase(
+      repository,
+      makeAdmin(true),
+    ).handle({
+      actorUserId: ActorId,
+      limit: 10,
+      offset: 0,
+      sourceType: 'CAMPAIGN',
+      sourceId: 'campaign-1',
+    });
+
+    expect(repository.listForAdmin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceType: 'CAMPAIGN',
+        sourceId: 'campaign-1',
+      }),
+    );
+  });
+});
+
+describe('DecideSponsorBannerApprovalUseCase (15/11)', () => {
+  const decide = (
+    repository: jest.Mocked<ISponsorBannerRepository>,
+    command: Record<string, unknown>,
+  ) =>
+    new DecideSponsorBannerApprovalUseCase(repository, makeAdmin(true)).handle({
+      actorUserId: ActorId,
+      bannerId: 'banner-1',
+      approve: true,
+      ...command,
+    } as never);
+
+  it.each([undefined, '   '])(
+    'từ chối mà lý do là %p -> 400, không ghi gì',
+    async (note) => {
+      const repository = makeRepository();
+
+      await expect(
+        decide(repository, { approve: false, note }),
+      ).rejects.toThrow(ValidationFailedException);
+      expect(repository.decideApproval).not.toHaveBeenCalled();
+    },
+  );
+
+  it('duyệt không cần lý do; không gửi expectedUpdatedAt thì truyền null', async () => {
+    const repository = makeRepository();
+    repository.decideApproval.mockResolvedValue({
+      kind: 'DECIDED',
+      banner: banner(),
+    });
+
+    await decide(repository, {});
+
+    expect(repository.decideApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approve: true,
+        note: null,
+        expectedUpdatedAt: null,
+      }),
+    );
+  });
+
+  it('expectedUpdatedAt được chuyển thành Date', async () => {
+    const repository = makeRepository();
+    repository.decideApproval.mockResolvedValue({
+      kind: 'DECIDED',
+      banner: banner(),
+    });
+
+    await decide(repository, { expectedUpdatedAt: '2026-11-15T01:02:03.456Z' });
+
+    expect(
+      repository.decideApproval.mock.calls[0][0].expectedUpdatedAt?.toISOString(),
+    ).toBe('2026-11-15T01:02:03.456Z');
+  });
+
+  it.each([
+    ['CHANGED', SponsorBannerChangedSinceViewedException],
+    ['ALREADY_DECIDED', SponsorBannerApprovalAlreadyDecidedException],
+    ['NOT_FOUND', SponsorBannerNotFoundException],
+  ] as const)('kết quả %s -> exception tương ứng', async (kind, exception) => {
+    const repository = makeRepository();
+    repository.decideApproval.mockResolvedValue({ kind } as never);
+
+    await expect(decide(repository, {})).rejects.toThrow(exception);
   });
 });
 
@@ -263,10 +487,15 @@ describe('ServeSponsorBannersUseCase', () => {
 
     expect(Object.keys(result.banners[0]).sort()).toEqual([
       'displayOrder',
+      'displayType',
+      'endsAt',
       'globalId',
       'imageUrl',
       'partnerName',
       'placement',
+      'sourceId',
+      'sourceType',
+      'startsAt',
       'targetUrl',
       'title',
     ]);

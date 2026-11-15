@@ -12,3 +12,19 @@ export class SponsorBannerApprovalAlreadyDecidedException extends ExceptionFrom(
 export class SponsorBannerNotServingException extends ExceptionFrom(
   CoreErrors.SPONSOR_BANNER_NOT_SERVING,
 ) {}
+
+export class SponsorBannerChangedSinceViewedException extends ExceptionFrom(
+  CoreErrors.SPONSOR_BANNER_CHANGED_SINCE_VIEWED,
+) {}
+
+export class CampaignPromotionNotEligibleException extends ExceptionFrom(
+  CoreErrors.CAMPAIGN_PROMOTION_NOT_ELIGIBLE,
+) {}
+
+export class CampaignPromotionLimitReachedException extends ExceptionFrom(
+  CoreErrors.CAMPAIGN_PROMOTION_LIMIT_REACHED,
+) {}
+
+export class CampaignPromotionNotFoundException extends ExceptionFrom(
+  CoreErrors.CAMPAIGN_PROMOTION_NOT_FOUND,
+) {}

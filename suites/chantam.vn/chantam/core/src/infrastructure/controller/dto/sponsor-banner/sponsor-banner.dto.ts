@@ -1,6 +1,9 @@
 import {
+  AdminBannerSourceTypes,
   BannerApprovalStatuses,
+  BannerDisplayTypes,
   BannerPlacements,
+  BannerSourceTypes,
   MaxBannerPartnerNameLength,
   MaxBannerTitleLength,
   MaxBannerUrlLength,
@@ -84,6 +87,27 @@ export class WriteSponsorBannerDto {
   placement: string;
 
   @ApiPropertyOptional({
+    enum: BannerDisplayTypes,
+    description:
+      'Cách app dựng banner. Bỏ trống = theo vị trí (`HOME_HERO` → `SLIDER`, `APP_SPLASH` → ' +
+      '`FULLSCREEN`, còn lại → `BANNER`). `APP_SPLASH` CHỈ đi với `FULLSCREEN` và ngược lại.',
+  })
+  @IsOptional()
+  @IsIn(BannerDisplayTypes as readonly string[])
+  displayType?: string;
+
+  @ApiPropertyOptional({
+    enum: AdminBannerSourceTypes,
+    default: 'SPONSORED',
+    description:
+      'Nhãn nguồn để lọc: `SPONSORED` (đối tác) hoặc `ADMIN` (nội dung nền tảng). ' +
+      '`CAMPAIGN` chỉ sinh từ đề xuất của chủ chiến dịch.',
+  })
+  @IsOptional()
+  @IsIn(AdminBannerSourceTypes as readonly string[])
+  sourceType?: string;
+
+  @ApiPropertyOptional({
     minimum: 0,
     default: 1,
     description: 'Thứ tự trong cùng một vị trí, nhỏ hiện trước.',
@@ -151,6 +175,16 @@ export class PatchSponsorBannerDto {
   @NotNullWhenPresent()
   @IsIn(BannerPlacements as readonly string[])
   placement?: string;
+
+  @ApiPropertyOptional({
+    enum: BannerDisplayTypes,
+    description:
+      'Cặp vị trí–kiểu được kiểm trên giá trị SAU khi trộn với bản đang lưu: đổi mỗi ' +
+      '`placement` sang `APP_SPLASH` trên một banner `BANNER` là 400.',
+  })
+  @NotNullWhenPresent()
+  @IsIn(BannerDisplayTypes as readonly string[])
+  displayType?: string;
 
   @ApiPropertyOptional({ minimum: 0 })
   @NotNullWhenPresent()
@@ -221,6 +255,20 @@ export class ListAdminBannersQueryDto {
   @IsOptional()
   @IsIn(BannerApprovalStatuses as readonly string[])
   approvalStatus?: string;
+
+  @ApiPropertyOptional({ enum: BannerSourceTypes })
+  @IsOptional()
+  @IsIn(BannerSourceTypes as readonly string[])
+  sourceType?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      '`global_id` chiến dịch nguồn — để chi tiết chiến dịch phía Admin liệt kê đề xuất của nó.',
+  })
+  @IsOptional()
+  @IsUUID()
+  sourceId?: string;
 }
 
 export class BannerIdParamDto {
@@ -234,11 +282,25 @@ export class DecideBannerApprovalDto {
   @IsBoolean()
   approve: boolean;
 
-  @ApiPropertyOptional({ maxLength: 1_000 })
+  @ApiPropertyOptional({
+    maxLength: 1_000,
+    description:
+      'BẮT BUỘC khi `approve: false` — owner cần biết vì sao để sửa.',
+  })
   @IsOptional()
   @IsString()
   @Length(1, 1_000)
   note?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-11-15T08:30:00.123Z',
+    description:
+      '`updatedAt` của bản Admin đang xem. Gửi kèm thì nội dung đổi sau khi mở sẽ trả 409 ' +
+      '`SPONSOR_BANNER_CHANGED_SINCE_VIEWED` thay vì duyệt một bản chưa ai xem. FE nên gửi.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  expectedUpdatedAt?: string;
 }
 
 export class DecideBannerApprovalBodyDto {
@@ -263,8 +325,47 @@ export class SetBannerActiveBodyDto {
   banner: SetBannerActiveDto;
 }
 
+export class BannerSourceCampaignDto {
+  @ApiProperty({ format: 'uuid' }) campaignId: string;
+  @ApiProperty() title: string;
+  @ApiProperty() slug: string;
+}
+
+export class BannerRequesterDto {
+  @ApiProperty({ format: 'uuid' }) userId: string;
+  @ApiProperty({ type: String, nullable: true }) fullName: string | null;
+}
+
 export class AdminBannerResponseDto {
   @ApiProperty() globalId: string;
+
+  @ApiProperty({ enum: BannerSourceTypes })
+  sourceType: string;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  sourceId: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  requestedBy: string | null;
+
+  @ApiPropertyOptional({
+    type: () => BannerSourceCampaignDto,
+    nullable: true,
+    description:
+      'Chiến dịch nguồn — chỉ có ở danh sách, khi `sourceType = CAMPAIGN`.',
+  })
+  source?: BannerSourceCampaignDto | null;
+
+  @ApiPropertyOptional({
+    type: () => BannerRequesterDto,
+    nullable: true,
+    description: 'Người đề xuất — chỉ có ở danh sách.',
+  })
+  requester?: BannerRequesterDto | null;
+
+  @ApiProperty({ enum: BannerDisplayTypes })
+  displayType: string;
+
   @ApiProperty() partnerName: string;
   @ApiProperty({ nullable: true }) partnerContact: string | null;
   @ApiProperty() title: string;
@@ -325,6 +426,30 @@ export class PublicBannerResponseDto {
       'và toàn bộ số liệu hiệu quả thì KHÔNG: đó là dữ liệu thương mại giữa Bên A và đối tác.',
   })
   partnerName: string;
+
+  @ApiProperty({
+    enum: BannerSourceTypes,
+    description:
+      'Banner từ đâu: đối tác, nền tảng, hay chiến dịch từ thiện đề xuất.',
+  })
+  sourceType: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: '`global_id` chiến dịch khi `sourceType = CAMPAIGN`.',
+  })
+  sourceId: string | null;
+
+  @ApiProperty({
+    enum: BannerDisplayTypes,
+    description: 'Cách dựng. `APP_SPLASH` luôn là `FULLSCREEN`.',
+  })
+  displayType: string;
+
+  @ApiProperty() startsAt: Date;
+  @ApiProperty() endsAt: Date;
 }
 
 export class ServeBannersResponseDto {

@@ -150,3 +150,4 @@ export * from './1803000000000-CharityOperations';
 export * from './1803100000000-CharityDisputesAndClipLength';
 export * from './1803200000000-CharityPostAfterEventWindow';
 export * from './1803300000000-GiftRequestQuantity';
+export * from './1803400000000-CampaignHomePromotion';

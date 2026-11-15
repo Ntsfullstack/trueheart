@@ -3227,3 +3227,61 @@ khiếu nại (`campaign_appeals.evidence_urls`), tranh chấp (`campaign_contri
 và nguồn ngoài của hỗ trợ mở (`campaign_other_support_needs.external_evidence_urls`) — trước đó các
 bằng chứng này bị coi là mồ côi.
 
+
+## 20. Đề xuất chiến dịch lên trang chủ (15/11/2026)
+
+Chủ hoạt động từ thiện **đề xuất** quảng bá hoạt động của mình lên các vị trí hiển thị. Đề xuất
+CHÍNH LÀ một banner (`sponsor_banners`, `sourceType = CAMPAIGN`) — không có bảng thứ hai, và Admin
+duyệt trong **đúng màn Banner tài trợ** hiện có. Thiết kế:
+`docs/superpowers/specs/2026-11-15-campaign-home-promotion-design.md`.
+
+### Owner (Bearer, chỉ chủ hoạt động)
+
+| Method | Đường dẫn | Ghi chú |
+| --- | --- | --- |
+| `POST` | `/charity-campaigns/:id/promotions` | Body `{ promotion: { title, imageKey, placement, displayType, displayOrder?, startsAt, endsAt } }` → **201** `{ promotion }`, ở `PENDING_APPROVAL` |
+| `GET` | `/charity-campaigns/:id/promotions` | `{ promotions: [...] }`, mới nhất trước, kèm `servingState` và `approvalNote` |
+| `PATCH` | `/charity-campaigns/:id/promotions/:promotionId` | Mọi trường tuỳ chọn; **mọi lượt sửa đưa về `PENDING_APPROVAL`** |
+
+- **Điều kiện:** hoạt động phải đã duyệt, đang mở, chưa xoá — ngược lại 409
+  `CAMPAIGN_PROMOTION_NOT_ELIGIBLE`.
+- **Ảnh:** `imageKey` lấy từ `POST /charity-campaigns/media/upload` (PUT xong mới gửi). Server xác
+  minh object thuộc người gửi, là ảnh, và URL công khai là `https://` — không nhận URL dán tay.
+- **Link và tên đối tác do server điền:** `targetUrl = chantam://campaign/<campaignGlobalId>`
+  (theo id, không theo slug, để link không gãy khi slug đổi); `partnerName` = tên hoạt động.
+- **Mốc:** tối đa N đề xuất **đang mở** mỗi hoạt động — đang chờ duyệt, hoặc đã duyệt mà chưa hết
+  hạn. Bị từ chối/hết hạn không tính. N = `banner.campaign_promotion.max_open_per_campaign` (mặc
+  định 3). Vượt → 409 `CAMPAIGN_PROMOTION_LIMIT_REACHED`. Sửa một đề xuất bị từ chối (gửi lại)
+  cũng phải còn suất. Hai lượt gửi song song được khoá hàng chiến dịch nên không cùng lọt.
+- **Khung giờ** được vượt ngày kết thúc hoạt động.
+- `servingState`: `PENDING` · `REJECTED` (xem `approvalNote`) · `INACTIVE` (Admin tắt) ·
+  `SCHEDULED` · `RUNNING` · `EXPIRED`. Không trả số lượt hiển thị/bấm.
+
+### Kiểu hiển thị và vị trí
+
+`displayType`: `FULLSCREEN` · `BANNER` · `SLIDER` · `INLINE` · `FLOATING`. Vị trí mới `APP_SPLASH`
+(poster sau Splash). **`APP_SPLASH` chỉ đi với `FULLSCREEN` và ngược lại** — chặn ở use case (400)
+và ở database (`CHK_sponsor_banners_splash_fullscreen`). Banner có sẵn được gán `SLIDER` nếu ở
+`HOME_HERO`, còn lại `BANNER`.
+
+### Admin (`/admin/banners`, quyền `banner.*` như cũ)
+
+- `GET`: thêm lọc `sourceType` (`ADMIN` · `CAMPAIGN` · `SPONSORED`) và `sourceId` (chiến dịch nguồn —
+  dùng cho chi tiết hoạt động phía Admin). Mỗi dòng thêm `sourceType`, `sourceId`, `requestedBy`,
+  `displayType`, `source: { campaignId, title, slug } | null`, `requester: { userId, fullName } | null`.
+- `POST`: nhận `displayType` (bỏ trống = theo vị trí) và `sourceType` (`SPONSORED` mặc định hoặc
+  `ADMIN`; `CAMPAIGN` → 400). Vẫn vào thẳng `APPROVED`.
+- `PATCH /:id`: nhận `displayType`; cặp vị trí–kiểu kiểm sau khi trộn với bản đang lưu. Admin sửa
+  KHÔNG đổi trạng thái duyệt. Banner `CAMPAIGN` **không** đổi được `targetUrl`, `partnerName`,
+  `partnerContact` (400).
+- `PATCH /:id/approval`: **từ chối bắt buộc `note`** (400). Duyệt xong là chạy luôn. Nhận
+  `expectedUpdatedAt` tuỳ chọn = `updatedAt` của bản đang xem; chủ hoạt động đã sửa sau đó → 409
+  `SPONSOR_BANNER_CHANGED_SINCE_VIEWED` (FE nên gửi để không duyệt một bản chưa ai xem).
+- `PATCH /:id/active` (bật/tắt, tắt khẩn cấp) và `DELETE` giữ nguyên.
+
+### Công khai (`GET /banners?placement=`)
+
+Mỗi banner thêm `sourceType`, `sourceId`, `displayType`, `startsAt`, `endsAt`. Lọc phục vụ giữ năm
+điều kiện cũ và **thêm một**: banner nguồn `CAMPAIGN` chỉ hiện khi hoạt động nguồn vẫn đã duyệt,
+đang mở (`is_active`) và chưa xoá — **đóng, đình chỉ hay xoá hoạt động là banner rời app ngay**,
+mở lại thì tự hiện lại. `POST /banners/:id/click` dùng cùng bộ lọc.

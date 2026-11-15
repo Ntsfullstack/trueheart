@@ -54,6 +54,7 @@ import {
 import {
   AbusiveModerationCorpus,
   AllocationPolicyConfigKey,
+  CampaignPromotionMaxOpenConfigKey,
   CharityAppealAutoCloseDaysConfigKey,
   CharityAppealOrganizerSlaDaysConfigKey,
   CharityAppealWindowDaysConfigKey,
@@ -150,6 +151,9 @@ const RequiredKeys: readonly string[] = [
   CharityPostMaxVideoSecondsConfigKey,
   CharityAppealOrganizerSlaDaysConfigKey,
   CharityAppealAutoCloseDaysConfigKey,
+  // Đề xuất chiến dịch lên trang chủ (15/11) — mốc "đang mở" mỗi chiến dịch,
+  // `Create/UpdateCampaignPromotionUseCase` đọc.
+  CampaignPromotionMaxOpenConfigKey,
 ];
 
 /**

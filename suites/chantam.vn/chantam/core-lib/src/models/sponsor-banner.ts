@@ -7,8 +7,10 @@ import { AppDeepLinkSchemes } from './deep-link';
  * duyệt và thống kê cơ bản."*
  *
  * UC-POST-04: *"Giới thiệu/Quảng cáo trong Phase 1 **chỉ do Admin tạo/đăng từ CMS**; user
- * không có chức năng tự đăng quảng cáo."* Nên không có endpoint nào cho người dùng tạo
- * banner, và đó là chủ ý của đặc tả chứ không phải phần còn thiếu.
+ * không có chức năng tự đăng quảng cáo."* Từ 15/11 có MỘT ngoại lệ: chủ hoạt động từ thiện
+ * **đề xuất** quảng bá chiến dịch của mình (`source_type = 'CAMPAIGN'`). Đề xuất vào
+ * `PENDING_APPROVAL`, link do server dựng, và chỉ Admin duyệt/bật được — người dùng vẫn không
+ * tự đăng được nội dung nào lên app.
  *
  * ## `placement` là ALLOWLIST, không phải chuỗi tự do
  *
@@ -60,6 +62,8 @@ export const BannerPlacements = [
   'DHARMA_CHANTING',
   'DHARMA_FORUM',
   'DHARMA_MONASTERY',
+  // Poster toàn màn hình sau Splash (15/11) — chỉ đi với `displayType = FULLSCREEN`.
+  'APP_SPLASH',
 ] as const;
 
 export type BannerPlacement = (typeof BannerPlacements)[number];
@@ -78,6 +82,7 @@ export const BannerPlacementLabels: Readonly<Record<BannerPlacement, string>> =
     DHARMA_CHANTING: 'Phật Pháp — Kinh tụng',
     DHARMA_FORUM: 'Phật Pháp — Diễn đàn',
     DHARMA_MONASTERY: 'Phật Pháp — Tự viện',
+    APP_SPLASH: 'Poster sau màn chờ',
   };
 
 /** Cùng ba trạng thái của hồ sơ Từ thiện — một lối duyệt cho mọi nội dung chờ duyệt. */
@@ -195,4 +200,112 @@ export function bannerGaps(input: {
     gaps.push('endsAt phải sau startsAt');
 
   return gaps;
+}
+
+// ── Đề xuất chiến dịch lên trang chủ (15/11) ─────────────────────────────────
+
+/**
+ * Banner từ đâu ra.
+ * - `SPONSORED` — banner đối tác, Admin nhập từ hồ sơ hợp đồng (mọi banner trước 15/11).
+ * - `ADMIN` — Admin tự đặt cho nội dung của chính nền tảng.
+ * - `CAMPAIGN` — chủ hoạt động từ thiện đề xuất; chỉ tạo được qua đường owner.
+ *
+ * `ADMIN` và `SPONSORED` chỉ là nhãn để lọc — không có luật nghiệp vụ nào khác nhau.
+ */
+export const BannerSourceTypes = ['ADMIN', 'CAMPAIGN', 'SPONSORED'] as const;
+export type BannerSourceType = (typeof BannerSourceTypes)[number];
+
+/** Nguồn Admin được chọn khi tạo tay. `CAMPAIGN` chỉ sinh ra từ đường owner. */
+export const AdminBannerSourceTypes = ['ADMIN', 'SPONSORED'] as const;
+
+/** Cách app dựng banner. Đi kèm `placement` theo `bannerDisplayTypeGaps`. */
+export const BannerDisplayTypes = [
+  'FULLSCREEN',
+  'BANNER',
+  'SLIDER',
+  'INLINE',
+  'FLOATING',
+] as const;
+export type BannerDisplayType = (typeof BannerDisplayTypes)[number];
+
+/**
+ * Kiểu hiển thị mặc định của một vị trí — dùng khi Admin bỏ trống và khi backfill.
+ *
+ * `HOME_HERO` vốn là dải trượt (`HERO_BANNER_SLIDER` của F63), nên mặc định `SLIDER`.
+ */
+export function defaultBannerDisplayType(
+  placement: BannerPlacement,
+): BannerDisplayType {
+  if (placement === 'APP_SPLASH') return 'FULLSCREEN';
+  if (placement === 'HOME_HERO') return 'SLIDER';
+  return 'BANNER';
+}
+
+/**
+ * Cặp vị trí–kiểu hợp lệ: `APP_SPLASH` ⇔ `FULLSCREEN`.
+ *
+ * Poster toàn màn hình chen giữa danh sách bài là một lớp phủ chặn người dùng không có chỗ
+ * đóng; ngược lại một dải banner nhỏ ở màn chờ thì không ai thấy. Database có CHECK
+ * `CHK_sponsor_banners_splash_fullscreen` cùng luật — đây là lớp trả 400 nói đúng chuyện.
+ */
+export function bannerDisplayTypeGaps(
+  placement: BannerPlacement,
+  displayType: string,
+): string[] {
+  if (!BannerDisplayTypes.includes(displayType as BannerDisplayType))
+    return [`displayType phải là một trong: ${BannerDisplayTypes.join(', ')}`];
+  if (placement === 'APP_SPLASH' && displayType !== 'FULLSCREEN')
+    return ['vị trí APP_SPLASH chỉ nhận displayType FULLSCREEN'];
+  if (placement !== 'APP_SPLASH' && displayType === 'FULLSCREEN')
+    return ['displayType FULLSCREEN chỉ dùng cho vị trí APP_SPLASH'];
+  return [];
+}
+
+/** Mốc số đề xuất "đang mở" mỗi chiến dịch (chốt 15/11). */
+export const CampaignPromotionMaxOpenConfigKey =
+  'banner.campaign_promotion.max_open_per_campaign';
+export const DefaultCampaignPromotionMaxOpen = 3;
+
+export function normalizeCampaignPromotionMaxOpen(value: unknown): number {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 20
+    ? value
+    : DefaultCampaignPromotionMaxOpen;
+}
+
+/**
+ * Link mở về chiến dịch — server dựng, owner không gửi.
+ *
+ * Theo `global_id` chứ không `slug`: link đã nằm trong banner đang chạy không được gãy khi
+ * slug đổi. Lược đồ `chantam://` nằm trong `AppDeepLinkSchemes`.
+ */
+export function campaignPromotionTargetUrl(campaignGlobalId: string): string {
+  return `chantam://campaign/${campaignGlobalId}`;
+}
+
+export type CampaignPromotionServingState =
+  'PENDING' | 'REJECTED' | 'INACTIVE' | 'SCHEDULED' | 'RUNNING' | 'EXPIRED';
+
+/**
+ * Trạng thái owner thấy cho một đề xuất.
+ *
+ * Thứ tự quyết định: duyệt trước (chưa duyệt thì khung giờ không quan trọng), rồi công tắc
+ * của Admin, rồi khung giờ. KHÔNG xét chiến dịch nguồn còn hoạt động hay không — owner thấy
+ * điều đó ở chính chiến dịch của họ.
+ */
+export function campaignPromotionServingState(input: {
+  readonly approvalStatus: BannerApprovalStatus;
+  readonly isActive: boolean;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly now: Date;
+}): CampaignPromotionServingState {
+  if (input.approvalStatus === 'PENDING_APPROVAL') return 'PENDING';
+  if (input.approvalStatus === 'REJECTED') return 'REJECTED';
+  if (!input.isActive) return 'INACTIVE';
+  if (input.endsAt.getTime() <= input.now.getTime()) return 'EXPIRED';
+  if (input.startsAt.getTime() > input.now.getTime()) return 'SCHEDULED';
+  return 'RUNNING';
 }

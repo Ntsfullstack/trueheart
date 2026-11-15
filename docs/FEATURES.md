@@ -323,6 +323,13 @@ Hết 3 tháng → **hết hạn (`EXPIRED`)** như mọi bài, gia hạn đư�
 **Chỉ Admin tạo từ CMS** — người dùng không tự đăng quảng cáo. Gồm banner, nội dung, CTA và
 deep link, đặt ở các vị trí app đã hỗ trợ sẵn.
 
+> ✅ **15/11 — đề xuất chiến dịch lên trang chủ.** Chủ hoạt động từ thiện **đề xuất** quảng bá
+> hoạt động của mình (`POST /charity-campaigns/:id/promotions`); đề xuất vào chờ duyệt trong đúng
+> màn Banner tài trợ, Admin duyệt/từ chối có lý do, duyệt xong chạy luôn. Link và tên đối tác do
+> server điền, tối đa 3 đề xuất đang mở mỗi hoạt động (Admin cấu hình), sửa là quay về chờ duyệt,
+> và hoạt động đóng/đình chỉ/xoá thì banner tự rời app. Thêm `displayType` và vị trí `APP_SPLASH`
+> (poster sau Splash). Người dùng vẫn không tự đăng được gì lên app khi Admin chưa duyệt.
+
 ### F21 — Công đức / Hồi hướng
 Hiển thị đối tượng/đơn vị **đã được Admin xác minh**, kèm liên kết hoặc QR.
 

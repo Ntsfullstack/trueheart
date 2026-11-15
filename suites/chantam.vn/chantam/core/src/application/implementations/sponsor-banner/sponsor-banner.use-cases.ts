@@ -24,6 +24,7 @@ import {
 } from '@/application/contracts/sponsor-banner';
 import {
   SponsorBannerApprovalAlreadyDecidedException,
+  SponsorBannerChangedSinceViewedException,
   SponsorBannerNotFoundException,
   SponsorBannerNotServingException,
 } from '@/domain/exceptions';
@@ -34,10 +35,14 @@ import {
   IWriteSponsorBannerParams,
 } from '@/domain/ports/repository';
 import {
+  AdminBannerSourceTypes,
+  BannerDisplayType,
   BannerPlacement,
   MaxBannerPartnerNameLength,
   MaxBannerTitleLength,
+  bannerDisplayTypeGaps,
   bannerGaps,
+  defaultBannerDisplayType,
 } from '@chantam.vn/chantam.core-lib/models';
 import {
   ForbiddenException,
@@ -68,8 +73,24 @@ function toPublic(banner: ISponsorBanner): IPublicSponsorBannerDto {
     placement: banner.placement,
     displayOrder: banner.displayOrder,
     partnerName: banner.partnerName,
+    sourceType: banner.sourceType,
+    sourceId: banner.sourceId,
+    displayType: banner.displayType,
+    startsAt: banner.startsAt,
+    endsAt: banner.endsAt,
   };
 }
+
+/**
+ * Trường Admin KHÔNG được đổi trên hàng `CAMPAIGN` (15/11): link do server dựng về đúng chiến
+ * dịch, và tên đối tác là ảnh chụp tên chiến dịch. Để Admin sửa là để banner "của chiến dịch
+ * X" trỏ đi nơi khác.
+ */
+const CampaignLockedFields = [
+  'targetUrl',
+  'partnerName',
+  'partnerContact',
+] as const;
 
 /**
  * Đọc và kiểm phần thân chung của một lượt ghi.
@@ -146,6 +167,8 @@ function prepareWrite(
   if (input.targetUrl !== undefined) changes.targetUrl = input.targetUrl;
   if (input.placement !== undefined)
     changes.placement = input.placement as BannerPlacement;
+  if (input.displayType !== undefined)
+    changes.displayType = input.displayType as BannerDisplayType;
   if (input.displayOrder !== undefined)
     changes.displayOrder = input.displayOrder;
   if (startsAt !== undefined) changes.startsAt = startsAt;
@@ -171,15 +194,29 @@ export class CreateSponsorBannerUseCase implements ICreateSponsorBannerUseCase {
 
     const prepared = prepareWrite(command, { partial: false });
 
-    // UC-POST-04: Phase 1 banner CHỈ do Admin tạo từ CMS, nên người tạo cũng là người
-    // duyệt và banner vào thẳng `APPROVED`. Giữ nguyên máy trạng thái ba bước thay vì bỏ
-    // nó đi: khi nào mở cho đối tác tự gửi hồ sơ thì chỉ phải đổi hai dòng dưới đây, không
-    // phải thêm một cột và một luồng duyệt.
+    // Nguồn: Admin chọn ADMIN hoặc SPONSORED. `CAMPAIGN` chỉ sinh từ đường owner — nhận nó
+    // ở đây là một banner "của chiến dịch" mà không chiến dịch nào biết.
+    const sourceType = command.sourceType ?? 'SPONSORED';
+    if (!(AdminBannerSourceTypes as readonly string[]).includes(sourceType))
+      throw new ValidationFailedException([
+        `sourceType phải là một trong: ${AdminBannerSourceTypes.join(', ')}`,
+      ]);
+
+    const placement = prepared.placement as BannerPlacement;
+    const displayType =
+      prepared.displayType ?? defaultBannerDisplayType(placement);
+    const pairGaps = bannerDisplayTypeGaps(placement, displayType);
+    if (pairGaps.length > 0) throw new ValidationFailedException(pairGaps);
+
+    // UC-POST-04: banner Admin tạo thì người tạo cũng là người duyệt, nên vào thẳng
+    // `APPROVED`. Đề xuất từ chiến dịch đi đường riêng và vào `PENDING_APPROVAL`.
     return this.repository.create({
       ...(prepared as IWriteSponsorBannerParams),
+      displayType,
       displayOrder: prepared.displayOrder ?? 1,
       partnerContact: prepared.partnerContact ?? null,
       createdBy: command.actorUserId,
+      sourceType: sourceType as 'ADMIN' | 'SPONSORED',
       approvalStatus: 'APPROVED',
       approvedBy: command.actorUserId,
     });
@@ -201,9 +238,36 @@ export class UpdateSponsorBannerUseCase implements IUpdateSponsorBannerUseCase {
     if (!(await this.admin.hasPermission(command.actorUserId, WritePermission)))
       throw new ForbiddenException();
 
+    const changes = prepareWrite(command, { partial: true });
+
+    // Đọc hàng đang lưu TRƯỚC khi ghi: cặp vị trí–kiểu phải kiểm trên giá trị SAU khi trộn
+    // (gửi mỗi `placement: APP_SPLASH` lên một hàng `BANNER` thì CHECK database ném 500), và
+    // hàng `CAMPAIGN` khoá vài trường.
+    const current = await this.repository.findByGlobalId(command.bannerId);
+    if (!current) throw new SponsorBannerNotFoundException();
+
+    if (current.sourceType === 'CAMPAIGN') {
+      const locked = CampaignLockedFields.filter(
+        (field) => command[field] !== undefined,
+      );
+      if (locked.length > 0)
+        throw new ValidationFailedException([
+          `Banner đề xuất từ chiến dịch không đổi được: ${locked.join(', ')}`,
+        ]);
+    }
+
+    if (changes.placement !== undefined || changes.displayType !== undefined) {
+      const pairGaps = bannerDisplayTypeGaps(
+        changes.placement ?? current.placement,
+        changes.displayType ?? current.displayType,
+      );
+      if (pairGaps.length > 0) throw new ValidationFailedException(pairGaps);
+    }
+
+    // Admin sửa KHÔNG đổi trạng thái duyệt — Admin chính là người duyệt.
     const updated = await this.repository.update({
       bannerId: command.bannerId,
-      changes: prepareWrite(command, { partial: true }),
+      changes,
     });
     if (!updated) throw new SponsorBannerNotFoundException();
 
@@ -231,6 +295,8 @@ export class ListAdminSponsorBannersUseCase implements IListAdminSponsorBannersU
       offset: command.offset,
       placement: command.placement,
       approvalStatus: command.approvalStatus,
+      sourceType: command.sourceType,
+      sourceId: command.sourceId,
     });
   }
 }
@@ -250,20 +316,40 @@ export class DecideSponsorBannerApprovalUseCase implements IDecideSponsorBannerA
     if (!(await this.admin.hasPermission(command.actorUserId, WritePermission)))
       throw new ForbiddenException();
 
-    if (!(await this.repository.findByGlobalId(command.bannerId)))
-      throw new SponsorBannerNotFoundException();
+    const note = command.note?.trim() || null;
+    // Từ chối mà không nói vì sao thì owner không biết sửa gì để gửi lại (15/11).
+    if (!command.approve && note === null)
+      throw new ValidationFailedException(['note: phải ghi lý do khi từ chối']);
 
-    const decided = await this.repository.decideApproval({
+    let expectedUpdatedAt: Date | null = null;
+    if (command.expectedUpdatedAt !== undefined) {
+      expectedUpdatedAt = new Date(command.expectedUpdatedAt);
+      if (!Number.isFinite(expectedUpdatedAt.getTime()))
+        throw new ValidationFailedException([
+          'expectedUpdatedAt không phải thời điểm hợp lệ',
+        ]);
+    }
+
+    const outcome = await this.repository.decideApproval({
       bannerId: command.bannerId,
       approverId: command.actorUserId,
       approve: command.approve,
-      note: command.note?.trim() || null,
+      note,
+      expectedUpdatedAt,
     });
-    // Banner tồn tại nhưng `UPDATE` không khớp hàng nào nghĩa là nó không còn
-    // `PENDING_APPROVAL` — một Admin khác đã xử lý.
-    if (!decided) throw new SponsorBannerApprovalAlreadyDecidedException();
 
-    return decided;
+    switch (outcome.kind) {
+      case 'DECIDED':
+        return outcome.banner;
+      case 'NOT_FOUND':
+        throw new SponsorBannerNotFoundException();
+      // Không còn `PENDING_APPROVAL` — một Admin khác đã xử lý.
+      case 'ALREADY_DECIDED':
+        throw new SponsorBannerApprovalAlreadyDecidedException();
+      // Còn chờ duyệt nhưng nội dung đã đổi sau khi Admin mở.
+      case 'CHANGED':
+        throw new SponsorBannerChangedSinceViewedException();
+    }
   }
 }
 

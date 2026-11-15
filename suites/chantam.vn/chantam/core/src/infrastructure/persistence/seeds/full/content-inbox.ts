@@ -1,3 +1,7 @@
+import {
+  BannerPlacement,
+  defaultBannerDisplayType,
+} from '@chantam.vn/chantam.core-lib/models';
 import { ISeedContext, Personas, SeedDomains, seedId } from './seed-context';
 
 const Image = 'https://placehold.co/1200x600.png';
@@ -94,14 +98,14 @@ export async function seedContentAndInbox(ctx: ISeedContext): Promise<void> {
         INSERT INTO sponsor_banners (
           global_id, partner_name, partner_contact, title, image_url, target_url, placement,
           display_order, starts_at, ends_at, is_active, approval_status, approval_note,
-          approved_at, approved_by, impression_count, click_count, created_by
+          approved_at, approved_by, impression_count, click_count, created_by, display_type
         )
         VALUES ($1, $2, 'lienhe@example.com', 'Đồng hành cùng Chân Tâm', $3, $4, $5, $6,
                 now() - interval '5 days', now() + interval '25 days', true, $7::text,
                 CASE WHEN $7::text = 'REJECTED' THEN 'Nội dung quảng cáo không phù hợp' END,
                 CASE WHEN $7::text <> 'PENDING_APPROVAL' THEN now() - interval '4 days' END,
                 CASE WHEN $7::text <> 'PENDING_APPROVAL' THEN $8::uuid END,
-                $9, $10, $8)
+                $9, $10, $8, $11)
         ON CONFLICT DO NOTHING
       `,
       [
@@ -115,6 +119,7 @@ export async function seedContentAndInbox(ctx: ISeedContext): Promise<void> {
         Personas.admin,
         approval === 'APPROVED' ? 1200 * n : 0,
         approval === 'APPROVED' ? 37 * n : 0,
+        defaultBannerDisplayType(placement as BannerPlacement),
       ],
     );
 

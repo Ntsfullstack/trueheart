@@ -1,14 +1,22 @@
 import {
+  ICreateCampaignPromotionUseCase,
   ICreateSponsorBannerUseCase,
   IDecideSponsorBannerApprovalUseCase,
   IDeleteSponsorBannerUseCase,
   IListAdminSponsorBannersUseCase,
+  IListCampaignPromotionsUseCase,
   IRecordBannerClickUseCase,
   IServeSponsorBannersUseCase,
   ISetSponsorBannerActiveUseCase,
+  IUpdateCampaignPromotionUseCase,
   IUpdateSponsorBannerUseCase,
 } from '@/application/contracts/sponsor-banner';
 import { Global, Module } from '@nestjs/common';
+import {
+  CreateCampaignPromotionUseCase,
+  ListCampaignPromotionsUseCase,
+  UpdateCampaignPromotionUseCase,
+} from './campaign-promotion.use-cases';
 import {
   CreateSponsorBannerUseCase,
   DecideSponsorBannerApprovalUseCase,
@@ -59,6 +67,19 @@ import {
       useClass: ServeSponsorBannersUseCase,
     },
     { provide: IRecordBannerClickUseCase, useClass: RecordBannerClickUseCase },
+    // Đề xuất chiến dịch lên trang chủ (15/11) — cùng resource `sponsor_banners`.
+    {
+      provide: ICreateCampaignPromotionUseCase,
+      useClass: CreateCampaignPromotionUseCase,
+    },
+    {
+      provide: IListCampaignPromotionsUseCase,
+      useClass: ListCampaignPromotionsUseCase,
+    },
+    {
+      provide: IUpdateCampaignPromotionUseCase,
+      useClass: UpdateCampaignPromotionUseCase,
+    },
   ],
   exports: [
     ICreateSponsorBannerUseCase,
@@ -69,6 +90,9 @@ import {
     IDeleteSponsorBannerUseCase,
     IServeSponsorBannersUseCase,
     IRecordBannerClickUseCase,
+    ICreateCampaignPromotionUseCase,
+    IListCampaignPromotionsUseCase,
+    IUpdateCampaignPromotionUseCase,
   ],
 })
 export class SponsorBannerUseCaseModule {}

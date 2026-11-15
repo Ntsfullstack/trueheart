@@ -268,6 +268,10 @@ Nghiệp vụ Chân Tâm
 | `0x1401` | `5121` | 404 Not Found | `SPONSOR_BANNER_NOT_FOUND` | Không tìm thấy banner |
 | `0x1402` | `5122` | 409 Conflict | `SPONSOR_BANNER_APPROVAL_ALREADY_DECIDED` | Banner này đã được xử lý |
 | `0x1403` | `5123` | 409 Conflict | `SPONSOR_BANNER_NOT_SERVING` | Banner này không còn được hiển thị |
+| `0x1404` | `5124` | 409 Conflict | `CAMPAIGN_PROMOTION_NOT_ELIGIBLE` | Chỉ hoạt động đã được duyệt và đang mở mới đề xuất lên trang chủ được |
+| `0x1405` | `5125` | 409 Conflict | `CAMPAIGN_PROMOTION_LIMIT_REACHED` | Mỗi hoạt động chỉ có tối đa 3 đề xuất đang chờ duyệt hoặc đang chạy |
+| `0x1406` | `5126` | 404 Not Found | `CAMPAIGN_PROMOTION_NOT_FOUND` | Không tìm thấy đề xuất của hoạt động này |
+| `0x1407` | `5127` | 409 Conflict | `SPONSOR_BANNER_CHANGED_SINCE_VIEWED` | Nội dung banner vừa được sửa sau khi bạn mở — tải lại để xem bản mới rồi duyệt |
 | `0x1501` | `5377` | 404 Not Found | `MERIT_UNIT_NOT_FOUND` | Không tìm thấy đơn vị công đức |
 | `0x1502` | `5378` | 404 Not Found | `MERIT_DECLARATION_NOT_FOUND` | Không tìm thấy lời khai công đức |
 | `0x1503` | `5379` | 409 Conflict | `MERIT_DECLARATION_ALREADY_COMPLETED` | Lời khai này đã được đánh dấu hoàn tất |
@@ -296,5 +300,5 @@ Nghiệp vụ Chân Tâm
 
 ---
 
-Tổng cộng **254 mã lỗi** trên 3 tầng.
+Tổng cộng **258 mã lỗi** trên 3 tầng.
 Một số mã đã khai trước cho milestone sau nên chưa endpoint nào trả về.

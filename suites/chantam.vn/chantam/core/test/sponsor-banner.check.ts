@@ -645,6 +645,7 @@ async function main(): Promise<void> {
         listUseCase.handle({ actorUserId: OutsiderId, limit: 10, offset: 0 }),
       'ForbiddenException',
     );
+    await runCampaignPromotionChecks(dataSource, repository);
   } finally {
     for (const source of opened.reverse())
       if (source.isInitialized) await source.destroy();
@@ -661,6 +662,334 @@ async function main(): Promise<void> {
     for (const failure of failures) console.error(`  - ${failure}`);
     process.exitCode = 1;
   }
+}
+
+/**
+ * Nhóm 9 — đề xuất chiến dịch lên trang chủ (15/11). Chỉ Postgres trả lời được: khoá
+ * `FOR UPDATE` giữ mốc khi hai lượt gửi song song, `EXISTS` ẩn banner khi chiến dịch đóng,
+ * và `date_trunc` khiến `expectedUpdatedAt` so khớp được với `updated_at` micro giây.
+ */
+async function runCampaignPromotionChecks(
+  dataSource: DataSource,
+  repository: SponsorBannerRepository,
+): Promise<void> {
+  console.log('\n9. Đề xuất chiến dịch lên trang chủ');
+
+  const OwnerId = 'd1000000-0000-4000-8000-0000000000c1';
+  const ApproverId = AdminId;
+  await dataSource.query(
+    `INSERT INTO users (global_id, username, password_hash, rank, status, full_name)
+     VALUES ($1, 'chuchiendich', 'x', 'MEMBER', 'ACTIVE', 'Chủ Chiến Dịch')`,
+    [OwnerId],
+  );
+
+  async function insertCampaign(slug: string): Promise<string> {
+    const [row] = await dataSource.query<{ global_id: string }[]>(
+      `INSERT INTO campaigns (title, slug, description, banner_url, badge_name,
+                              start_time, end_time, created_by, approval_status, approved_at)
+       VALUES ($1, $2, 'Mô tả đủ mười ký tự.', 'https://cdn.chantam.vn/a.jpg', 'Huy hiệu',
+               now() - interval '1 day', now() + interval '10 days', $3, 'APPROVED', now())
+       RETURNING global_id`,
+      [`Áo ấm ${slug}`, slug, OwnerId],
+    );
+    return row.global_id;
+  }
+
+  const campaignId = await insertCampaign('ao-am-vung-cao');
+  const otherCampaignId = await insertCampaign('chien-dich-khac');
+
+  const promotion = (overrides: Record<string, unknown> = {}) => ({
+    campaignId,
+    requestedBy: OwnerId,
+    partnerName: 'Áo ấm ao-am-vung-cao',
+    title: 'Chung tay áo ấm vùng cao',
+    imageUrl: 'https://cdn.chantam.vn/promo.jpg',
+    targetUrl: `chantam://campaign/${campaignId}`,
+    placement: 'HOME_INLINE' as const,
+    displayType: 'BANNER' as const,
+    displayOrder: 1,
+    startsAt: new Date(Date.now() - Hour),
+    endsAt: new Date(Date.now() + 24 * Hour),
+    maxOpen: 3,
+    ...overrides,
+  });
+
+  const created = await repository.createCampaignPromotion(promotion());
+  check(
+    'đề xuất mới vào PENDING_APPROVAL, nguồn CAMPAIGN, có người đề xuất',
+    created.kind === 'CREATED' &&
+      created.banner.approvalStatus === 'PENDING_APPROVAL' &&
+      created.banner.sourceType === 'CAMPAIGN' &&
+      created.banner.sourceId === campaignId &&
+      created.banner.requestedBy === OwnerId,
+    created.kind,
+  );
+  if (created.kind !== 'CREATED') return;
+  const first = created.banner;
+
+  const servingIds = async () =>
+    (await repository.findServing({ placement: 'HOME_INLINE', limit: 20 })).map(
+      (banner) => banner.globalId,
+    );
+  check(
+    'chưa duyệt thì không được phục vụ',
+    !(await servingIds()).includes(first.globalId),
+  );
+
+  // Duyệt với mốc `updatedAt` mà Admin đã thấy — phải khớp dù Postgres giữ micro giây.
+  const approved = await repository.decideApproval({
+    bannerId: first.globalId,
+    approverId: ApproverId,
+    approve: true,
+    note: null,
+    expectedUpdatedAt: first.updatedAt,
+  });
+  check(
+    'duyệt với expectedUpdatedAt vừa đọc -> DECIDED (so ở độ phân giải mili giây)',
+    approved.kind === 'DECIDED',
+    approved.kind,
+  );
+  check(
+    'duyệt xong là chạy luôn',
+    (await servingIds()).includes(first.globalId),
+  );
+
+  await dataSource.query(
+    `UPDATE campaigns SET is_active = false WHERE global_id = $1`,
+    [campaignId],
+  );
+  check(
+    '[RF2] chiến dịch đóng -> banner rời findServing',
+    !(await servingIds()).includes(first.globalId),
+  );
+  check(
+    '[RF2] chiến dịch đóng -> recordClick không cộng',
+    (await repository.recordClick(first.globalId)) === false,
+  );
+  const whileClosed = await repository.createCampaignPromotion(promotion());
+  check(
+    'chiến dịch đóng -> không tạo được đề xuất mới',
+    whileClosed.kind === 'NOT_ELIGIBLE',
+    whileClosed.kind,
+  );
+  await dataSource.query(
+    `UPDATE campaigns SET is_active = true WHERE global_id = $1`,
+    [campaignId],
+  );
+  check(
+    'chiến dịch mở lại -> banner tự hiện lại',
+    (await servingIds()).includes(first.globalId),
+  );
+
+  // Mốc 3: đã có 1 (đang chạy). Thêm 2 nữa là đủ.
+  const second = await repository.createCampaignPromotion(promotion());
+  const third = await repository.createCampaignPromotion(promotion());
+  const fourth = await repository.createCampaignPromotion(promotion());
+  check(
+    'mốc 3: lượt thứ tư -> LIMIT_REACHED',
+    second.kind === 'CREATED' &&
+      third.kind === 'CREATED' &&
+      fourth.kind === 'LIMIT_REACHED',
+    `${second.kind}/${third.kind}/${fourth.kind}`,
+  );
+  if (third.kind !== 'CREATED') return;
+  const thirdId = third.banner.globalId;
+
+  // Từ chối một đề xuất là trả lại một suất.
+  await repository.decideApproval({
+    bannerId: thirdId,
+    approverId: ApproverId,
+    approve: false,
+    note: 'Ảnh mờ',
+    expectedUpdatedAt: null,
+  });
+  const afterReject = await repository.createCampaignPromotion(promotion());
+  check(
+    'từ chối một đề xuất -> tạo được thêm một',
+    afterReject.kind === 'CREATED',
+    afterReject.kind,
+  );
+
+  // Gửi lại đề xuất bị từ chối khi đã đủ 3 đang mở -> chặn.
+  const resubmit = await repository.updateCampaignPromotion({
+    campaignId,
+    promotionId: thirdId,
+    changes: { title: 'Ảnh mới rõ hơn' },
+    maxOpen: 3,
+  });
+  check(
+    'gửi lại hàng bị từ chối khi đã đủ mốc -> LIMIT_REACHED',
+    resubmit.kind === 'LIMIT_REACHED',
+    resubmit.kind,
+  );
+  const resubmitWithRoom = await repository.updateCampaignPromotion({
+    campaignId,
+    promotionId: thirdId,
+    changes: { title: 'Ảnh mới rõ hơn' },
+    maxOpen: 4,
+  });
+  check(
+    'gửi lại khi còn suất -> PENDING_APPROVAL, xoá ghi chú và người duyệt',
+    resubmitWithRoom.kind === 'UPDATED' &&
+      resubmitWithRoom.banner.approvalStatus === 'PENDING_APPROVAL' &&
+      resubmitWithRoom.banner.approvalNote === null &&
+      resubmitWithRoom.banner.approvedAt === null &&
+      resubmitWithRoom.banner.title === 'Ảnh mới rõ hơn',
+    resubmitWithRoom.kind,
+  );
+
+  // Sửa bản đang chạy -> rời app tới khi duyệt lại.
+  const edited = await repository.updateCampaignPromotion({
+    campaignId,
+    promotionId: first.globalId,
+    changes: { displayOrder: 5 },
+    maxOpen: 3,
+  });
+  check(
+    'owner sửa bản đã duyệt -> quay về PENDING_APPROVAL và rời findServing',
+    edited.kind === 'UPDATED' &&
+      edited.banner.approvalStatus === 'PENDING_APPROVAL' &&
+      !(await servingIds()).includes(first.globalId),
+    edited.kind,
+  );
+
+  // Duyệt với mốc cũ sau khi owner sửa -> CHANGED; đã quyết -> ALREADY_DECIDED.
+  const stale = await repository.decideApproval({
+    bannerId: first.globalId,
+    approverId: ApproverId,
+    approve: true,
+    note: null,
+    expectedUpdatedAt: first.updatedAt,
+  });
+  check(
+    'duyệt với expectedUpdatedAt cũ -> CHANGED',
+    stale.kind === 'CHANGED',
+    stale.kind,
+  );
+  await repository.decideApproval({
+    bannerId: thirdId,
+    approverId: ApproverId,
+    approve: true,
+    note: null,
+    expectedUpdatedAt: null,
+  });
+  const twice = await repository.decideApproval({
+    bannerId: thirdId,
+    approverId: ApproverId,
+    approve: false,
+    note: 'muộn',
+    expectedUpdatedAt: null,
+  });
+  check(
+    'đã quyết rồi -> ALREADY_DECIDED',
+    twice.kind === 'ALREADY_DECIDED',
+    twice.kind,
+  );
+
+  check(
+    '[RF4] id đề xuất gọi qua chiến dịch khác -> null',
+    (await repository.findCampaignPromotion(
+      otherCampaignId,
+      first.globalId,
+    )) === null,
+  );
+  const crossUpdate = await repository.updateCampaignPromotion({
+    campaignId: otherCampaignId,
+    promotionId: first.globalId,
+    changes: { title: 'x' },
+    maxOpen: 3,
+  });
+  check(
+    '[RF4] sửa qua chiến dịch khác -> NOT_FOUND',
+    crossUpdate.kind === 'NOT_FOUND',
+    crossUpdate.kind,
+  );
+
+  // [RF1] Hai lượt song song khi còn đúng một suất.
+  const raceCampaign = await insertCampaign('dua-suat-cuoi');
+  const raceInput = promotion({
+    campaignId: raceCampaign,
+    targetUrl: `chantam://campaign/${raceCampaign}`,
+    maxOpen: 1,
+  });
+  const raced = await Promise.all([
+    repository.createCampaignPromotion(raceInput),
+    repository.createCampaignPromotion(raceInput),
+  ]);
+  check(
+    '[RF1] hai lượt gửi song song khi còn 1 suất -> đúng một CREATED',
+    raced.filter((outcome) => outcome.kind === 'CREATED').length === 1 &&
+      raced.filter((outcome) => outcome.kind === 'LIMIT_REACHED').length === 1,
+    raced.map((outcome) => outcome.kind).join('/'),
+  );
+
+  const listed = await repository.listByCampaign(campaignId);
+  check(
+    'listByCampaign chỉ trả đề xuất của chiến dịch đó',
+    listed.length >= 4 &&
+      listed.every((banner) => banner.sourceId === campaignId),
+    `${listed.length}`,
+  );
+
+  const adminPage = await repository.listForAdmin({
+    limit: 50,
+    offset: 0,
+    sourceType: 'CAMPAIGN',
+    sourceId: campaignId,
+  });
+  check(
+    'listForAdmin lọc theo nguồn + chiến dịch: total khớp, có tên chiến dịch và người đề xuất',
+    adminPage.total === adminPage.items.length &&
+      adminPage.total === listed.length &&
+      adminPage.items.every(
+        (item) =>
+          item.source?.campaignId === campaignId &&
+          item.source.title === 'Áo ấm ao-am-vung-cao' &&
+          item.requester?.fullName === 'Chủ Chiến Dịch',
+      ),
+    `total=${adminPage.total} items=${adminPage.items.length} list=${listed.length}`,
+  );
+  const sponsoredPage = await repository.listForAdmin({
+    limit: 50,
+    offset: 0,
+    sourceType: 'SPONSORED',
+  });
+  check(
+    '[RF5] banner đối tác: nguồn SPONSORED, không có source/requester',
+    sponsoredPage.total > 0 &&
+      sponsoredPage.items.every(
+        (item) =>
+          item.sourceType === 'SPONSORED' &&
+          item.source === null &&
+          item.requester === null,
+      ),
+    `${sponsoredPage.total}`,
+  );
+
+  await expectReject(
+    'CHECK: APP_SPLASH đi với BANNER bị chặn',
+    () =>
+      dataSource.query(
+        `INSERT INTO sponsor_banners
+           (partner_name, title, image_url, target_url, placement, starts_at, ends_at,
+            display_type)
+         VALUES ('Đối tác', 'Thử', 'https://cdn.chantam.vn/a.jpg', 'https://a.vn',
+                 'APP_SPLASH', now(), now() + interval '1 day', 'BANNER')`,
+      ),
+    'CHK_sponsor_banners_splash_fullscreen',
+  );
+  await expectReject(
+    'CHECK: nguồn CAMPAIGN mà thiếu source_id bị chặn',
+    () =>
+      dataSource.query(
+        `INSERT INTO sponsor_banners
+           (partner_name, title, image_url, target_url, placement, starts_at, ends_at,
+            source_type)
+         VALUES ('Đối tác', 'Thử', 'https://cdn.chantam.vn/a.jpg', 'https://a.vn',
+                 'HOME_HERO', now(), now() + interval '1 day', 'CAMPAIGN')`,
+      ),
+    'CHK_sponsor_banners_source_id',
+  );
 }
 
 void main().catch((error: unknown) => {

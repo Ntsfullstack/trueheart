@@ -167,6 +167,7 @@ config_bundles ──< config_revisions ──< capability_policies ──< capa
 Nội dung vận hành, chỉ trỏ users qua created_by/updated_by: blogs · sponsor_banners ·
 home_campaign_configs · lunar_holidays · media_assets · notification_templates ·
 notification_broadcasts · group_role_permissions
+(sponsor_banners còn trỏ campaigns qua source_id và users qua requested_by — đề xuất chiến dịch 15/11)
 
 gift_posts   (nguyên mẫu M1, giữ lại cho tương thích ngược)
 ```
@@ -1120,7 +1121,7 @@ khai dùng chung danh sách cột).
 | Bảng | Cột / ràng buộc chính |
 | --- | --- |
 | `blogs` (`1797700000000`) | `global_id`, `title`, `slug` UNIQUE (kebab-case), `category` `PHAT_PHAP` · `GUONG_SANG` · `CHIEN_DICH` · `SONG_XANH`, `summary`, `content_html`, `thumbnail_url`, `author_id` (FK SET NULL), `view_count`, `is_published` (cặp với `published_at`; publish thì phải có nội dung và thumbnail), timestamps, `deleted_at` |
-| `sponsor_banners` (`1798500000000`) | `global_id`, `partner_name`, `partner_contact`, `title`, `image_url` (`https://`), `target_url` (`https://` · `chantam://` · `givingapp://`), `placement` (12 vị trí, từ `HOME_HERO` tới `DHARMA_MONASTERY`), `display_order`, `starts_at` < `ends_at`, `is_active`, `approval_status` (như `campaigns`), `impression_count` / `click_count`, `created_by`, timestamps, `deleted_at` |
+| `sponsor_banners` (`1798500000000`) | `global_id`, `partner_name`, `partner_contact`, `title`, `image_url` (`https://`), `target_url` (`https://` · `chantam://` · `givingapp://`), `placement` (13 vị trí, từ `HOME_HERO` tới `DHARMA_MONASTERY` và `APP_SPLASH`), `display_order`, `starts_at` < `ends_at`, `is_active`, `approval_status` (như `campaigns`), `impression_count` / `click_count`, `created_by`, timestamps, `deleted_at`. Từ `1803400000000` (15/11): `source_type` (`ADMIN` · `CAMPAIGN` · `SPONSORED`, hàng cũ = `SPONSORED`), `source_id` (FK `campaigns.global_id` RESTRICT; có ⇔ `CAMPAIGN`), `requested_by` (FK `users`), `display_type` (`FULLSCREEN` · `BANNER` · `SLIDER` · `INLINE` · `FLOATING`; `APP_SPLASH` ⇔ `FULLSCREEN`) |
 | `home_campaign_configs` (`1797500000000`) | Home động theo chiến dịch: `global_id`, `campaign_name`, `theme_config` (object), `marquee_text`, `popup_config` / `floating_banner` (object NULL), `banners` / `sections_order` (mảng), `start_time` < `end_time`, `is_active`, `created_by` / `updated_by`. **`EXCL_home_campaign_configs_active_overlap`** (`EXCLUDE USING gist ... WHERE is_active`) — hai cấu hình đang bật không được giao nhau về thời gian |
 | `lunar_holidays` (`1797900000000`) | `lunar_month` (1–12), `lunar_day` (1–30), UNIQUE `(lunar_month, lunar_day)`, `name`, `description`, `is_active`, `sort_order`, `updated_by` |
 | `media_assets` (`1801000000000`) | Thư viện ảnh CMS: `global_id`, `storage_key` UNIQUE, `public_url` (`https?://`), `content_type`, `file_name`, `uploaded_by` (FK SET NULL), `created_at`. Là một nguồn "khoá còn sống" để job dọn object mồ côi không xoá ảnh CMS |

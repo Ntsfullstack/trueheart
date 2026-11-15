@@ -91,6 +91,45 @@ describe('Admin config authorization', () => {
 });
 
 describe('Admin config input validation', () => {
+  // Mốc đề xuất chiến dịch lên trang chủ (15/11): seed + đọc mà Admin không sửa được qua
+  // endpoint chung là "cấu hình động" phải deploy mới đổi.
+  it.each([1, 3, 20])(
+    'nhận banner.campaign_promotion.max_open_per_campaign = %p',
+    async (value) => {
+      const repository = makeRepository(['config.write']);
+
+      await new PublishAdminConfigUseCase(repository as never).handle({
+        actorUserId: ActorId,
+        systemConfig: {
+          ...ValidConfig,
+          key: 'banner.campaign_promotion.max_open_per_campaign',
+          value,
+        } as never,
+      });
+
+      expect(repository.publishSystemConfig).toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, 21, 50])(
+    'từ chối banner.campaign_promotion.max_open_per_campaign = %p (normalize sẽ lặng lẽ về 3)',
+    async (value) => {
+      const repository = makeRepository(['config.write']);
+
+      await expect(
+        new PublishAdminConfigUseCase(repository as never).handle({
+          actorUserId: ActorId,
+          systemConfig: {
+            ...ValidConfig,
+            key: 'banner.campaign_promotion.max_open_per_campaign',
+            value,
+          } as never,
+        }),
+      ).rejects.toThrow();
+      expect(repository.publishSystemConfig).not.toHaveBeenCalled();
+    },
+  );
+
   // Dữ liệu sai KHÔNG phải là thiếu quyền. Trả 403 cho một payload hỏng khiến
   // admin đi tìm quyền bị thiếu trong khi thứ cần sửa là body.
   const cases: [string, Record<string, unknown>][] = [

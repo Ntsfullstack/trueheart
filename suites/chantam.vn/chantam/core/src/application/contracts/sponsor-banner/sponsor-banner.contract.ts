@@ -1,7 +1,12 @@
-import { ISponsorBanner } from '@/domain/ports/repository';
+import {
+  ISponsorBanner,
+  ISponsorBannerAdminItem,
+} from '@/domain/ports/repository';
 import {
   BannerApprovalStatus,
+  BannerDisplayType,
   BannerPlacement,
+  BannerSourceType,
 } from '@chantam.vn/chantam.core-lib/models';
 import { IUseCase } from '@chantam/service.common-lib';
 
@@ -13,6 +18,8 @@ export interface IWriteSponsorBannerInput {
   readonly imageUrl: string;
   readonly targetUrl: string;
   readonly placement: string;
+  /** Bỏ trống khi tạo = mặc định theo vị trí (`defaultBannerDisplayType`). */
+  readonly displayType?: string;
   readonly displayOrder?: number;
   readonly startsAt: string;
   readonly endsAt: string;
@@ -20,6 +27,8 @@ export interface IWriteSponsorBannerInput {
 
 export interface ICreateSponsorBannerCommand extends IWriteSponsorBannerInput {
   readonly actorUserId: string;
+  /** `ADMIN | SPONSORED`, mặc định `SPONSORED`. `CAMPAIGN` chỉ sinh từ đường owner. */
+  readonly sourceType?: string;
 }
 
 export interface ICreateSponsorBannerUseCase extends IUseCase<
@@ -51,10 +60,13 @@ export interface IListAdminSponsorBannersCommand {
   readonly offset: number;
   readonly placement?: BannerPlacement;
   readonly approvalStatus?: BannerApprovalStatus;
+  readonly sourceType?: BannerSourceType;
+  /** `global_id` chiến dịch nguồn — cho chi tiết chiến dịch phía Admin. */
+  readonly sourceId?: string;
 }
 
 export interface ISponsorBannerPageResult {
-  readonly items: ISponsorBanner[];
+  readonly items: ISponsorBannerAdminItem[];
   readonly total: number;
 }
 
@@ -71,7 +83,13 @@ export interface IDecideSponsorBannerApprovalCommand {
   readonly actorUserId: string;
   readonly bannerId: string;
   readonly approve: boolean;
+  /** BẮT BUỘC khi từ chối (15/11) — owner cần biết vì sao để sửa. */
   readonly note?: string;
+  /**
+   * `updatedAt` của bản Admin đang xem (ISO). Có gửi mà hàng đã đổi → 409, để không duyệt
+   * một nội dung chưa ai xem. Tuỳ chọn để FE cũ không gãy.
+   */
+  readonly expectedUpdatedAt?: string;
 }
 
 export interface IDecideSponsorBannerApprovalUseCase extends IUseCase<
@@ -130,6 +148,14 @@ export interface IPublicSponsorBannerDto {
    * hiệu quả là dữ liệu thương mại giữa Bên A và đối tác.
    */
   readonly partnerName: string;
+  /** Nguồn banner (15/11) — mobile dùng để biết banner đến từ đâu. */
+  readonly sourceType: BannerSourceType;
+  /** `global_id` chiến dịch khi nguồn là `CAMPAIGN`. */
+  readonly sourceId: string | null;
+  /** Cách dựng: `APP_SPLASH` luôn là `FULLSCREEN`. */
+  readonly displayType: BannerDisplayType;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
 }
 
 export interface IServeSponsorBannersCommand {

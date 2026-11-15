@@ -8,11 +8,13 @@ import {
 } from '@/application/contracts/sponsor-banner';
 import {
   SponsorBannerApprovalAlreadyDecidedException,
+  SponsorBannerChangedSinceViewedException,
   SponsorBannerNotFoundException,
 } from '@/domain/exceptions';
 import {
   BannerApprovalStatus,
   BannerPlacement,
+  BannerSourceType,
 } from '@chantam.vn/chantam.core-lib/models';
 import {
   ApiTokenErrors,
@@ -88,7 +90,9 @@ export class AdminSponsorBannerController {
   @ApiOperation({
     summary: 'Danh sách banner, kèm số liệu',
     description:
-      'Lọc theo `placement` và `approvalStatus`. Trả `impressionCount`, `clickCount` và ' +
+      'Lọc theo `placement`, `approvalStatus`, `sourceType` và `sourceId` (chiến dịch nguồn). ' +
+      'Mỗi dòng kèm `source` (chiến dịch nguồn) và `requester` (người đề xuất) khi banner do ' +
+      'chủ chiến dịch đề xuất. Trả `impressionCount`, `clickCount` và ' +
       '`clickThroughRate` để đối soát với đối tác.\n\n' +
       '`clickThroughRate` tính hai chữ số thập phân, không làm tròn về phần trăm nguyên: ' +
       'CTR banner thường dưới 1%, nên làm tròn nguyên biến mọi banner thành "0%" và Admin ' +
@@ -110,6 +114,8 @@ export class AdminSponsorBannerController {
           placement: query.placement as BannerPlacement | undefined,
           approvalStatus: query.approvalStatus as
             BannerApprovalStatus | undefined,
+          sourceType: query.sourceType as BannerSourceType | undefined,
+          sourceId: query.sourceId,
         }),
       )
       .build();
@@ -120,15 +126,15 @@ export class AdminSponsorBannerController {
   @ApiOperation({
     summary: 'Tạo banner',
     description:
-      'UC-POST-04: Phase 1 banner **chỉ do Admin tạo từ CMS**, nên banner vào thẳng ' +
-      '`APPROVED` và `approvedBy` ghi chính người tạo.\n\n' +
-      'Máy trạng thái ba bước vẫn giữ nguyên dù hiện chưa dùng tới bước chờ: khi nào mở cho ' +
-      'đối tác tự gửi hồ sơ thì chỉ phải đổi hai dòng trong use case, không phải thêm một ' +
-      'cột và một luồng duyệt.',
+      'Banner Admin tạo vào thẳng `APPROVED` và `approvedBy` ghi chính người tạo. Đề xuất từ ' +
+      'chủ chiến dịch đi đường riêng (`POST /charity-campaigns/:id/promotions`) và vào ' +
+      '`PENDING_APPROVAL`.\n\n' +
+      '`displayType` bỏ trống thì theo vị trí; `APP_SPLASH` chỉ đi với `FULLSCREEN`. ' +
+      '`sourceType` nhận `SPONSORED` (mặc định) hoặc `ADMIN`.',
   })
   @ApiErrorResponses(...ApiTokenErrors, ForbiddenException, [
     ValidationFailedException,
-    ['endsAt phải sau startsAt'],
+    ['vị trí APP_SPLASH chỉ nhận displayType FULLSCREEN'],
   ])
   @ApiCreatedResponse({
     type: ResponseDto.forApi(AdminBannerWrapperResponseDto),
@@ -152,13 +158,18 @@ export class AdminSponsorBannerController {
     description:
       'Chỉ sửa những trường có gửi; trường bỏ trống nghĩa là "không đổi". Không gửi gì thì ' +
       '**không** chạy câu `UPDATE` nào — một `UPDATE` rỗng vẫn đụng `updatedAt`, và Admin ' +
-      'mất cách biết banner nào thật sự được sửa.',
+      'mất cách biết banner nào thật sự được sửa.\n\n' +
+      'Admin sửa KHÔNG đổi trạng thái duyệt. Banner nguồn `CAMPAIGN` không đổi được ' +
+      '`targetUrl`, `partnerName`, `partnerContact` (link do server dựng về chiến dịch).',
   })
   @ApiErrorResponses(
     ...ApiTokenErrors,
     ForbiddenException,
     SponsorBannerNotFoundException,
-    [ValidationFailedException, ['endsAt phải sau startsAt']],
+    [
+      ValidationFailedException,
+      ['Banner đề xuất từ chiến dịch không đổi được: targetUrl'],
+    ],
   )
   @ApiOkResponse({ type: ResponseDto.forApi(AdminBannerWrapperResponseDto) })
   public async update(
@@ -182,14 +193,17 @@ export class AdminSponsorBannerController {
     description:
       'Chỉ đổi được banner còn `PENDING_APPROVAL`. Hai Admin bấm cùng lúc thì người sau ' +
       'nhận 409 — phép kiểm đó nằm trong `WHERE` của chính câu `UPDATE`.\n\n' +
-      'Hiện mọi banner do Admin tạo đã là `APPROVED`, nên đường này dành cho khi mở cho đối ' +
-      'tác tự gửi hồ sơ.',
+      'Từ chối (`approve: false`) BẮT BUỘC có `note`. Duyệt xong là banner chạy luôn (nếu đã ' +
+      'tới `startsAt`). Gửi `expectedUpdatedAt` = `updatedAt` của bản đang xem để không duyệt ' +
+      'nhầm một bản chủ chiến dịch vừa sửa (409 `SPONSOR_BANNER_CHANGED_SINCE_VIEWED`).',
   })
   @ApiErrorResponses(
     ...ApiTokenErrors,
     ForbiddenException,
     SponsorBannerNotFoundException,
     SponsorBannerApprovalAlreadyDecidedException,
+    SponsorBannerChangedSinceViewedException,
+    [ValidationFailedException, ['note: phải ghi lý do khi từ chối']],
   )
   @ApiOkResponse({ type: ResponseDto.forApi(AdminBannerWrapperResponseDto) })
   public async decide(
@@ -202,6 +216,7 @@ export class AdminSponsorBannerController {
       bannerId: param.id,
       approve: body.approval.approve,
       note: body.approval.note,
+      expectedUpdatedAt: body.approval.expectedUpdatedAt,
     });
 
     return ResponseDto.create().succeed().attach({ banner }).build();

@@ -26,8 +26,9 @@ import {
  * theo class, nên gộp hai thứ vào một file làm nó báo lỗi cho những route không hề đụng
  * nhau. Ranh giới file ở đây trùng đúng ranh giới định tuyến thật.
  *
- * UC-POST-04: Phase 1 **không có** endpoint nào cho người dùng tạo banner. Đó là chủ ý của
- * đặc tả chứ không phải phần còn thiếu.
+ * UC-POST-04: Phase 1 **không có** endpoint nào cho người dùng tự đăng banner. Từ 15/11 chủ
+ * chiến dịch **đề xuất** được qua `POST /charity-campaigns/:id/promotions`, nhưng đề xuất chỉ
+ * lên đây sau khi Admin duyệt.
  */
 @ApiTags('Banner Tài Trợ')
 @Controller('banners')
@@ -46,7 +47,12 @@ export class SponsorBannerPublicController {
     description:
       'Công khai, không cần token. Lọc đủ bốn điều kiện: đã duyệt, còn bật, chưa xoá, và ' +
       '**đang trong khung giờ** — thiếu điều kiện cuối là chạy banner của một hợp đồng đã ' +
-      'hết, tức phát miễn phí cho đối tác cũ và chiếm chỗ của đối tác đang trả tiền.\n\n' +
+      'hết, tức phát miễn phí cho đối tác cũ và chiếm chỗ của đối tác đang trả tiền. Banner ' +
+      'nguồn `CAMPAIGN` còn đòi chiến dịch nguồn vẫn đã duyệt, đang mở và chưa xoá — đóng ' +
+      'hay đình chỉ chiến dịch là banner rời app ngay.\n\n' +
+      'Mỗi banner kèm `sourceType`, `sourceId`, `displayType`, `startsAt`, `endsAt`. ' +
+      '`APP_SPLASH` (poster sau Splash) luôn là `FULLSCREEN`; app hiện tuần tự theo ' +
+      '`displayOrder` rồi mới vào Home.\n\n' +
       'Mỗi lượt gọi cộng một lượt hiển thị cho từng banner trả về. Đó là **lượt phục vụ**, ' +
       'không phải lượt mắt thấy: client prefetch hay người dùng cuộn qua mà không nhìn thì ' +
       'vẫn tính.\n\n' +
