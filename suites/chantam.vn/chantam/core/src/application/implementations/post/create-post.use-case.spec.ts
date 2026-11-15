@@ -167,6 +167,8 @@ describe('CreatePostUseCase', () => {
         details: {
           condition: GiftPostConditions.USED,
           estimatedValue: 1_500_000,
+          // Không khai điều kiện thì khoá vẫn có mặt với `null` (15/11).
+          requirements: null,
         },
       }),
     );
@@ -640,5 +642,104 @@ describe('CreatePostUseCase · đồng hồ 7 + 30 ngày (CHỐT-10)', () => {
     const saved = deps.posts.createPostWithinQuota.mock.calls[0][2];
     expect(saved.selectionDeadline).toBeNull();
     expect(days(saved.expiresAt)).toBeGreaterThan(80);
+  });
+});
+
+describe('CreatePostUseCase · điều kiện cho/nhận `requirements` (15/11)', () => {
+  function makeDeps() {
+    const posts = {
+      createPostWithinQuota: jest.fn(
+        async (
+          _authorId: string,
+          _quota: number,
+          _post: { details: Record<string, unknown> },
+        ) => true,
+      ),
+      findOneByOrFail: jest.fn(async () => ({ globalId: 'post' })),
+    };
+    const categories = {
+      findOneBy: jest.fn(async () => makeCategory()),
+      findAncestorChain: jest.fn(async () => [
+        { categoryId: CategoryId, isActive: true },
+      ]),
+    };
+    const users = {
+      findOneBy: jest.fn(async () => makeUser({ rank: UserRanks.MEMBER })),
+    };
+    const entitlements = {
+      getCapability: jest.fn(async () => ({ allowed: true, limit: 3 })),
+    };
+    return { posts, categories, users, entitlements };
+  }
+
+  function run(
+    deps: ReturnType<typeof makeDeps>,
+    post: Record<string, unknown>,
+  ) {
+    return new CreatePostUseCase(
+      deps.posts as never,
+      deps.categories as never,
+      deps.entitlements as never,
+      new ProfileGate(deps.users as never),
+    ).handle({
+      userId: UserId,
+      post: {
+        title: 'Áo khoác mùa đông',
+        description: 'Áo còn mới, size M, giặt sạch.',
+        categoryId: CategoryId,
+        location: { lat: 10.7724, lng: 106.698 },
+        areaLabel: 'Quận 1, TP.HCM',
+        ...post,
+      },
+    } as never);
+  }
+
+  const saved = (deps: ReturnType<typeof makeDeps>) =>
+    deps.posts.createPostWithinQuota.mock.calls[0][2].details;
+
+  it('OFFER lưu requirements đã cắt khoảng trắng vào details', async () => {
+    const deps = makeDeps();
+
+    await run(deps, {
+      postType: PostTypes.OFFER,
+      condition: GiftPostConditions.USED,
+      estimatedValue: 200_000,
+      requirements: '  Ưu tiên sinh viên, tự đến lấy  ',
+    });
+
+    expect(saved(deps)).toEqual({
+      condition: GiftPostConditions.USED,
+      estimatedValue: 200_000,
+      requirements: 'Ưu tiên sinh viên, tự đến lấy',
+    });
+  });
+
+  it('WANTED không gửi requirements thì khoá có mặt với giá trị null', async () => {
+    // Khoá VẮNG MẶT trong jsonb không nói được là "chưa khai" hay "dữ liệu cũ".
+    const deps = makeDeps();
+
+    await run(deps, { postType: PostTypes.WANTED });
+
+    expect(saved(deps)).toEqual({ requirements: null });
+  });
+
+  it('WANTED gửi chuỗi chỉ toàn khoảng trắng thì lưu null', async () => {
+    const deps = makeDeps();
+
+    await run(deps, { postType: PostTypes.WANTED, requirements: '    ' });
+
+    expect(saved(deps)).toEqual({ requirements: null });
+  });
+
+  it('loại bài khác OFFER/WANTED gửi requirements thì bị từ chối', async () => {
+    const deps = makeDeps();
+
+    await expect(
+      run(deps, {
+        postType: PostTypes.CHARITY,
+        requirements: 'Chỉ nhận đồ còn dùng được',
+      }),
+    ).rejects.toThrow('requirements chỉ áp dụng cho bài OFFER và WANTED');
+    expect(deps.posts.createPostWithinQuota).not.toHaveBeenCalled();
   });
 });

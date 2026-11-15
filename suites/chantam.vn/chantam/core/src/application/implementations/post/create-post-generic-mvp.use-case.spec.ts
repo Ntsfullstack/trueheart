@@ -137,7 +137,11 @@ function expectedDetails(postType: PostTypes): Record<string, unknown> {
     return {
       condition: GiftPostConditions.USED,
       estimatedValue: 1_500_000,
+      requirements: null,
     };
+
+  // Bài Muốn xin chỉ mang điều kiện nhận (15/11).
+  if (postType === PostTypes.WANTED) return { requirements: null };
 
   if (postType === PostTypes.CLASSIFIED)
     return {

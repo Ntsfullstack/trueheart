@@ -230,6 +230,13 @@ export class OwnProfileDto implements IOwnProfileDto {
   @ApiProperty({ description: 'Username không đổi sau đăng ký.' })
   username: string;
 
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    description: 'Ngày tham gia.',
+  })
+  createdAt: Date;
+
   @ApiProperty({ nullable: true, description: 'Họ tên chủ tài khoản.' })
   fullName: string | null;
 

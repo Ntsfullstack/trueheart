@@ -10,7 +10,10 @@ import {
   IUpdatePostResponseDto,
 } from '@chantam.vn/chantam.core-lib/dto';
 import { IPostEntity } from '@chantam.vn/chantam.core-lib/entities';
-import { MaxClassifiedPrice } from '@chantam.vn/chantam.core-lib/models';
+import {
+  MaxClassifiedPrice,
+  MaxPostRequirementsLength,
+} from '@chantam.vn/chantam.core-lib/models';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -23,6 +26,7 @@ import {
   IsUUID,
   Length,
   Max,
+  MaxLength,
   Min,
   ValidateIf,
   ValidateNested,
@@ -124,6 +128,18 @@ export class UpdatePostDto implements IUpdatePostDto {
   @Min(0)
   @Max(1_000_000_000)
   estimatedValue?: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: MaxPostRequirementsLength,
+    description:
+      'Điều kiện cho/nhận. Chỉ bài OFFER và WANTED. Bỏ trống = giữ nguyên; `null` hoặc chuỗi trắng = xoá.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MaxPostRequirementsLength)
+  requirements?: string | null;
 
   @ApiPropertyOptional({ type: () => GeoPointDto })
   @ValidateIf((_post, value) => value !== undefined)

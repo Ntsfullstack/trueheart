@@ -7,6 +7,7 @@ export function toOwnProfileDto(user: IUserEntity): IOwnProfileDto {
   return {
     userId: user.globalId,
     username: user.username,
+    createdAt: user.createdAt,
     fullName: user.fullName,
     avatarUrl: user.avatarUrl,
     email: user.email,

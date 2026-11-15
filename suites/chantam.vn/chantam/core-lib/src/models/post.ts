@@ -59,3 +59,30 @@ export interface IPost {
    */
   selectionDeadline: Date | null;
 }
+
+/**
+ * Điều kiện cho/nhận do người đăng tự ghi — "Ưu tiên sinh viên, tự đến lấy" (15/11).
+ *
+ * KHÁC `details.condition`: đó là tình trạng món đồ (`GiftPostConditions`). Trường này lưu ở
+ * `details.requirements`, cùng chỗ với các trường riêng theo loại bài khác.
+ */
+export const MaxPostRequirementsLength = 500;
+
+/** Chỉ bài Muốn cho và Muốn xin mang `requirements`. */
+export const PostTypesWithRequirements: readonly PostTypes[] = [
+  PostTypes.OFFER,
+  PostTypes.WANTED,
+];
+
+/**
+ * `undefined` giữ nguyên (sửa bài không gửi = không đổi), cắt khoảng trắng hai đầu, chuỗi
+ * rỗng sau khi cắt thành `null` — lưu một chuỗi trắng là hiện một ô "Điều kiện" trống trơn.
+ */
+export function normalizePostRequirements(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}

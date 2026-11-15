@@ -44,6 +44,12 @@ export class GetPublicProfileParamsDto implements IGetPublicProfileParamsDto {
 
 export class PublicProfileDto implements IPublicProfileDto {
   @ApiProperty() username: string;
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    description: 'Ngày tham gia.',
+  })
+  createdAt: Date;
   @ApiProperty({ nullable: true }) fullName: string | null;
   @ApiProperty({ nullable: true }) avatarUrl: string | null;
   @ApiProperty({ enum: UserRanks }) rank: UserRanks;

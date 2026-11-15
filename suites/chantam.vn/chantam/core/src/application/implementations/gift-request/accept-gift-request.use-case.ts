@@ -18,7 +18,9 @@ import {
 import {
   GiftPostStatuses,
   GiftRequestStatuses,
+  PostTypes,
 } from '@chantam.vn/chantam.core-lib/consts';
+import { giftTransactionRoles } from '@chantam.vn/chantam.core-lib/models';
 import { ForbiddenException } from '@chantam/service.common-lib/exception';
 import { makeGlobalId } from '@chantam/service.common-lib/utils';
 import { Inject, Injectable, Optional } from '@nestjs/common';
@@ -86,12 +88,18 @@ export class AcceptGiftRequestUseCase implements IAcceptGiftRequestUseCase {
     // Quyền chọn tay kiểm TRƯỚC khi đọc yêu cầu: không có quyền thì việc yêu cầu đó
     // có tồn tại hay không cũng không còn liên quan, và trả `GiftRequestNotFound`
     // trước `Forbidden` là tiết lộ có/không một id.
-    const selectCapability = await this.entitlementRepository.getCapability(
-      command.userId,
-      SelectRequesterCapability,
-    );
-    if (!selectCapability?.allowed) {
-      throw new SelectRequesterNotAllowedException();
+    //
+    // Bài Muốn Nhận KHÔNG qua cổng (quyết định 15/11, thay SRS v1.15.0 dòng 72): chủ bài
+    // là người NHẬN đang chọn người tặng, và "muốn xin của ai thì xin". Cổng Kim Cương
+    // chỉ dành cho người CHO chọn người nhận.
+    if (post.postType !== PostTypes.WANTED) {
+      const selectCapability = await this.entitlementRepository.getCapability(
+        command.userId,
+        SelectRequesterCapability,
+      );
+      if (!selectCapability?.allowed) {
+        throw new SelectRequesterNotAllowedException();
+      }
     }
 
     const targetRequest = await this.giftRequestRepository.findOneBy({
@@ -120,14 +128,23 @@ export class AcceptGiftRequestUseCase implements IAcceptGiftRequestUseCase {
         allowClassified: true,
       });
 
-    // SAU khi lượt trao đã ghi. Người xin đang chờ biết mình có được chọn không.
+    // SAU khi lượt trao đã ghi. Người được chọn đang chờ biết kết quả.
+    //
+    // Vai suy từ loại bài, không gán cứng "người bấm = người tặng": trên bài Muốn Nhận
+    // người bấm là người NHẬN và người xin là người TẶNG (15/11).
+    const roles = giftTransactionRoles({
+      postType: post.postType,
+      postAuthorId: post.authorId,
+      requesterId: targetRequest.requesterId,
+    });
     await this.acceptedNotifier.announce({
-      receiverId: targetRequest.requesterId,
-      giverId: command.userId,
+      receiverId: roles.receiverId,
+      giverId: roles.giverId,
       postId: command.postId,
       transactionId: finalTransactionId,
       // Chủ bài tự bấm, nên KHÔNG báo lại cho họ — xem `notifyGiverIfPassive`.
       trigger: 'MANUAL',
+      postType: post.postType,
     });
     // Người còn lại vừa bị chuyển STANDBY (thiếu hàng) — báo họ việc làm được.
     await this.lifecycleNotifier?.announceRebalanced(rebalanced ?? []);

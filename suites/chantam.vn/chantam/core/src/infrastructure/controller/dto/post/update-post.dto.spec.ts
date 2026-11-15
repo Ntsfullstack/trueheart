@@ -39,9 +39,18 @@ describe('UpdatePostDto', () => {
     { totalQuantity: 1.5 },
     { deliveryMethod: 'OTHER' },
     { price: -1 },
+    { requirements: 'x'.repeat(501) },
+    { requirements: 42 },
   ])('rejects invalid values %p', async (input) => {
     expect(
       await validate(plainToInstance(UpdatePostDto, input)),
     ).not.toHaveLength(0);
+  });
+
+  it('accepts requirements up to 500 characters and null to clear', async () => {
+    for (const requirements of ['x'.repeat(500), null])
+      expect(
+        await validate(plainToInstance(UpdatePostDto, { requirements })),
+      ).toHaveLength(0);
   });
 });
