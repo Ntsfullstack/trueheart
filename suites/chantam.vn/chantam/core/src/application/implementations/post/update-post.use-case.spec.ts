@@ -17,7 +17,10 @@ import {
   ShipPayers,
 } from '@chantam.vn/chantam.core-lib/consts';
 import { IPostEntity } from '@chantam.vn/chantam.core-lib/entities';
-import { ForbiddenException } from '@chantam/service.common-lib/exception';
+import {
+  ForbiddenException,
+  ValidationFailedException,
+} from '@chantam/service.common-lib/exception';
 import { UpdatePostUseCase } from './update-post.use-case';
 
 const PostId = '11111111-1111-1111-1111-111111111111';
@@ -46,6 +49,7 @@ function makePost(overrides: Partial<IPostEntity> = {}): IPostEntity {
     isSos: false,
     deliveryMethod: null,
     shipPayer: null,
+    shippingFee: null,
     charityTransferStatus: null,
     charityTransferRequestedAt: null,
     charityTransferNote: null,
@@ -270,6 +274,7 @@ describe('UpdatePostUseCase', () => {
     expect(posts.updateOwnedContent.mock.calls[0][0].changes).toMatchObject({
       deliveryMethod: null,
       shipPayer: null,
+      shippingFee: null,
     });
     await useCase.handle({
       postId: PostId,
@@ -384,6 +389,50 @@ describe('UpdatePostUseCase · điều kiện cho/nhận `requirements` (15/11)'
     await expect(
       update(useCase, { requirements: 'Không mặc cả' }),
     ).rejects.toThrow('requirements chỉ áp dụng cho bài OFFER và WANTED');
+    expect(posts.updateOwnedContent).not.toHaveBeenCalled();
+  });
+});
+
+describe('UpdatePostUseCase · phí ship và availableDay (16/11)', () => {
+  const update = (useCase: UpdatePostUseCase, post: Record<string, unknown>) =>
+    useCase.handle({ postId: PostId, userId: AuthorId, post } as never);
+
+  it('đặt shippingFee trên bài GIVER_SHIPS', async () => {
+    const { useCase, posts } = setup({
+      deliveryMethod: DeliveryMethods.GIVER_SHIPS,
+    });
+    await update(useCase, { shippingFee: 25_000 });
+    expect(posts.updateOwnedContent.mock.calls[0][0].changes).toMatchObject({
+      shippingFee: 25_000,
+    });
+  });
+
+  it('shippingFee trên bài tự đến lấy -> 400', async () => {
+    const { useCase, posts } = setup({
+      deliveryMethod: DeliveryMethods.SELF_PICKUP,
+    });
+    await expect(update(useCase, { shippingFee: 25_000 })).rejects.toThrow(
+      'shippingFee chỉ khai được khi deliveryMethod là GIVER_SHIPS',
+    );
+    expect(posts.updateOwnedContent).not.toHaveBeenCalled();
+  });
+
+  it('[RF1] đổi sang tự đến lấy -> phí ship tự về null', async () => {
+    const { useCase, posts } = setup({
+      deliveryMethod: DeliveryMethods.GIVER_SHIPS,
+      shippingFee: 30_000,
+    });
+    await update(useCase, { deliveryMethod: DeliveryMethods.SELF_PICKUP });
+    expect(posts.updateOwnedContent.mock.calls[0][0].changes).toMatchObject({
+      shippingFee: null,
+    });
+  });
+
+  it('[RF4] PATCH gửi availableDay -> 400, không âm thầm bỏ qua', async () => {
+    const { useCase, posts } = setup({ postType: PostTypes.WANTED });
+    await expect(update(useCase, { availableDay: 10 })).rejects.toThrow(
+      ValidationFailedException,
+    );
     expect(posts.updateOwnedContent).not.toHaveBeenCalled();
   });
 });

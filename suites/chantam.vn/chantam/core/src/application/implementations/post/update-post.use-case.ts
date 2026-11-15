@@ -149,6 +149,19 @@ export class UpdatePostUseCase implements IUpdatePostUseCase {
       throw new ValidationFailedException([
         'shipPayer chỉ khai được khi deliveryMethod là GIVER_SHIPS',
       ]);
+    if (
+      input.shippingFee != null &&
+      deliveryMethod !== DeliveryMethods.GIVER_SHIPS
+    )
+      throw new ValidationFailedException([
+        'shippingFee chỉ khai được khi deliveryMethod là GIVER_SHIPS',
+      ]);
+    // Thời gian tồn tại đặt một lần lúc tạo (16/11). Nhận rồi lặng lẽ bỏ qua là để người đăng
+    // tưởng đã gia hạn được bài.
+    if (input.availableDay !== undefined)
+      throw new ValidationFailedException([
+        'availableDay không sửa được sau khi tạo bài',
+      ]);
     const allocated = post.totalQuantity - post.remainingQuantity;
     if (input.totalQuantity !== undefined && input.totalQuantity <= allocated)
       throw new ValidationFailedException([
@@ -182,6 +195,12 @@ export class UpdatePostUseCase implements IUpdatePostUseCase {
           deliveryMethod !== DeliveryMethods.GIVER_SHIPS
             ? null
             : input.shipPayer,
+        // Cùng lối với `shipPayer`: rời `GIVER_SHIPS` là phí ship về `null`, nếu không CHECK
+        // `CHK_posts_shipping_fee_delivery` ném 500 ngay trên lượt sửa hợp lệ.
+        shippingFee:
+          deliveryMethod !== DeliveryMethods.GIVER_SHIPS
+            ? null
+            : input.shippingFee,
         title: command.post.title,
         description: command.post.description,
         areaLabel: command.post.areaLabel,

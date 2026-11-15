@@ -129,8 +129,8 @@ export class ModerateAdminPostUseCase implements IModerateAdminPostUseCase {
       throw new ValidationFailedException(['reason không được để trống']);
     const decision = command.moderation.decision;
     const now = new Date();
-    // Đọc loại bài TRƯỚC để chọn đúng hạn dự phòng: `OFFER`/`WANTED` 37 ngày,
-    // loại khác 3 tháng (CHỐT-10). Không tính trong SQL vì con số ngày chỉ nên
+    // Đọc loại bài TRƯỚC để chọn đúng hạn dự phòng: `OFFER` 37 ngày, `WANTED` 30
+    // ngày (mặc định `availableDay`, 16/11), loại khác 3 tháng (CHỐT-10). Không tính trong SQL vì con số ngày chỉ nên
     // nằm ở `core-lib` — hai nơi nói hai mức là chỗ CHỐT-05 từng bị hiểu lệch.
     //
     // Lượt đọc này nằm ngoài transaction của `moderateByAdmin`. Loại bài gần như

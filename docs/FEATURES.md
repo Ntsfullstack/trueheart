@@ -351,6 +351,13 @@ Draft ──▶ Published ──▶ Matched / In Transaction ──▶ Completed
   nếu chưa ghép được thì tự mở thêm 30 ngày, tổng thời gian tối đa **37 ngày từ lúc đăng**.
   Có phản hồi hợp lệ ở bất kỳ thời điểm nào khi bài còn mở thì ghép ngay, không chờ xét.
 
+> ✅ **16/11 — bài Muốn Nhận (`WANTED`) có vòng đời riêng.** Người đăng chọn thời gian tồn
+> tại `availableDay` 1–30 ngày (mặc định 30); bài hết hạn đúng sau số ngày đó và **không tự
+> mở thêm 30 ngày**. Hạn xét = `min(7, availableDay − 1)` ngày, luôn sớm hơn hạn sống ít nhất
+> một ngày. Chỉ đặt lúc tạo. Bài Muốn Tặng (`OFFER`) giữ nguyên 7 + 30 = 37 ngày như trên.
+> Bài `WANTED` **không nhận thông báo nhắc sắp hết hạn / mời gia hạn** — người đăng đã tự chọn
+> thời hạn.
+
 ### F23 — Chuyển vật phẩm về điểm từ thiện
 Trước khi bài hết hạn, người đăng có thể **yêu cầu chuyển** vật phẩm cho điểm từ thiện hoặc
 Admin. Admin duyệt. Quá thời hạn chờ thì bài bị loại khỏi danh sách hoạt động nhưng
@@ -982,6 +989,10 @@ trong hai:
 - Người cho **hỗ trợ ship / gửi vận chuyển**
 
 Bên A đã chốt phần phí (CH-2): bài mang thêm trường **bên trả ship**.
+
+> ✅ **16/11 — thêm `shippingFee`** (phí ship, VND 0–10 triệu) trên `POST/PATCH /posts`. Chỉ
+> khai được khi người cho gửi hàng (`GIVER_SHIPS`); đổi sang hình thức khác thì tự xoá. Chỉ là
+> con số tham khảo — hệ thống không xử lý thanh toán.
 
 | Trường | Giá trị | Ghi chú |
 | --- | --- | --- |

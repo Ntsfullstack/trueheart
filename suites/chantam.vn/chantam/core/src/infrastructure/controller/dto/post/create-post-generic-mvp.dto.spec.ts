@@ -34,3 +34,31 @@ describe('CreatePostBodyDto Generic MVP', () => {
     },
   );
 });
+
+describe('CreatePostBodyDto · phí ship và availableDay (16/11)', () => {
+  const validateWanted = (extra: Record<string, unknown>) =>
+    validate(
+      plainToInstance(CreatePostBodyDto, {
+        post: { ...common, postType: 'WANTED', ...extra },
+      }),
+    );
+
+  it.each([{ availableDay: 1 }, { availableDay: 30 }, { shippingFee: 0 }])(
+    'nhận %p',
+    async (extra) => {
+      expect(
+        await validateWanted({ ...extra, deliveryMethod: 'GIVER_SHIPS' }),
+      ).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    { availableDay: 0 },
+    { availableDay: 31 },
+    { availableDay: 2.5 },
+    { shippingFee: -1 },
+    { shippingFee: 10_000_001 },
+  ])('từ chối %p', async (extra) => {
+    expect(await validateWanted(extra)).not.toHaveLength(0);
+  });
+});

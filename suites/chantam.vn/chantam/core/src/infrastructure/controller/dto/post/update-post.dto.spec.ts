@@ -10,6 +10,7 @@ describe('UpdatePostDto', () => {
       isSos: false,
       deliveryMethod: null,
       shipPayer: null,
+      shippingFee: null,
       price: 10000,
       negotiable: true,
       condition: 'USED',
@@ -41,6 +42,9 @@ describe('UpdatePostDto', () => {
     { price: -1 },
     { requirements: 'x'.repeat(501) },
     { requirements: 42 },
+    { shippingFee: -1 },
+    { shippingFee: 10_000_001 },
+    { shippingFee: 1.5 },
   ])('rejects invalid values %p', async (input) => {
     expect(
       await validate(plainToInstance(UpdatePostDto, input)),

@@ -141,7 +141,8 @@ function expectedDetails(postType: PostTypes): Record<string, unknown> {
     };
 
   // Bài Muốn xin chỉ mang điều kiện nhận (15/11).
-  if (postType === PostTypes.WANTED) return { requirements: null };
+  if (postType === PostTypes.WANTED)
+    return { requirements: null, availableDay: 30 };
 
   if (postType === PostTypes.CLASSIFIED)
     return {

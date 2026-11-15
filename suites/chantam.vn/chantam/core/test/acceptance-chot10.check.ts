@@ -707,10 +707,10 @@ async function main(): Promise<void> {
       [wantedId],
     );
     check(
-      'WANTED cũng có mốc 7 ngày và hạn 37 ngày như OFFER (CHỐT-10 mục 1)',
+      'WANTED có mốc 7 ngày như OFFER, và mặc định sống 30 ngày (availableDay, 16/11)',
       daysBetween(wanted.publishedAt, wantedRow.selection_deadline) ===
         SelectionWindowDays &&
-        daysBetween(wanted.publishedAt, wantedRow.expires_at) === 37,
+        daysBetween(wanted.publishedAt, wantedRow.expires_at) === 30,
       `${daysBetween(wanted.publishedAt, wantedRow.selection_deadline)} + ${daysBetween(wantedRow.selection_deadline, wantedRow.expires_at)}`,
     );
     check(

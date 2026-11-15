@@ -173,6 +173,7 @@ async function main(): Promise<void> {
         isSos: false,
         deliveryMethod: null,
         shipPayer: null,
+        shippingFee: null,
         charityTransferStatus: null,
         charityTransferRequestedAt: null,
         charityTransferNote: null,

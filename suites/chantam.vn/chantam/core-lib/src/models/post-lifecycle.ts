@@ -3,8 +3,8 @@ import { PostTypes } from '../consts';
 /**
  * Bài đăng sống 3 tháng kể từ lúc được duyệt (CHỐT-05, CHỐT-07).
  *
- * **KHÔNG áp cho `OFFER`/`WANTED` nữa** — CHỐT-10 cho hai loại đó vòng đời riêng
- * 7 + 30 ngày. Dùng `postExpiryDateFor` thay vì gọi `postExpiryDate` trực tiếp.
+ * **KHÔNG áp cho `OFFER`/`WANTED` nữa** — CHỐT-10 cho `OFFER` vòng đời 7 + 30 ngày, và từ
+ * 16/11 `WANTED` sống `availableDay` ngày (1–30, mặc định 30). Dùng `postExpiryDateFor` thay vì gọi `postExpiryDate` trực tiếp.
  */
 export const PostLifetimeMonths = 3;
 
@@ -21,8 +21,9 @@ export const SelectionWindowDays = 7;
 /**
  * Giai đoạn mở rộng, TỰ ĐỘNG khi hết hạn xét mà chưa ghép được ai (CHỐT-10).
  *
- * Đây là thứ thay thế chế độ `EXTENDED` cũ: không còn ai chọn nó, mọi bài chưa
- * ghép được đều được thêm khoảng này. Trong khoảng đó bài **vẫn nhận phản hồi**
+ * Đây là thứ thay thế chế độ `EXTENDED` cũ: không còn ai chọn nó, mọi bài `OFFER` chưa
+ * ghép được đều được thêm khoảng này. Bài `WANTED` KHÔNG có giai đoạn này từ 16/11 —
+ * xem `wantedLifecycleDates`. Trong khoảng đó bài **vẫn nhận phản hồi**
  * và vẫn áp cơ chế ghép — nó không phải một giai đoạn chờ chết.
  */
 export const ExtensionWindowDays = 30;
@@ -53,7 +54,8 @@ export const ExtensionWindowDays = 30;
  * Vai nay suy từ `giftTransactionRoles`, một chỗ duy nhất, và `acceptRequest`
  * TRẢ VỀ vai đã phân giải để nơi gọi khỏi đoán lại. Nên cờ này bật được.
  *
- * Vòng đời 37 ngày vì thế áp cho `WANTED` từ đây. Bài `WANTED` đăng TRƯỚC 11/10
+ * Hạn xét vì thế áp cho `WANTED` từ đây. Hạn SỐNG của `WANTED` thì từ 16/11 là
+ * `availableDay` ngày, không còn 37 — xem `wantedLifecycleDates`. Bài `WANTED` đăng TRƯỚC 11/10
  * giữ hạn ba tháng đã hứa — migration cho chúng một `selection_deadline` nhưng
  * KHÔNG rút `expires_at`, cùng lối như `1799300000000`.
  */
@@ -81,9 +83,10 @@ export function selectionDeadlineFrom(publishedAt: Date): Date {
 /**
  * Mốc hết hạn theo LOẠI bài.
  *
- * `OFFER`/`WANTED`: 7 + 30 = **37 ngày** từ lúc đăng. Mọi loại khác giữ 3 tháng
- * của CHỐT-05/CHỐT-07 — CHỐT-10 nói thẳng là nó chỉ bỏ vòng đời ba tháng "cho
- * hai loại bài này", nên đây là một phép thu hẹp chứ không phải một mâu thuẫn.
+ * `OFFER`: 7 + 30 = **37 ngày** từ lúc đăng. `WANTED`: **30 ngày** mặc định từ 16/11 — người
+ * đăng chọn được 1–30 (`availableDay`, xem `wantedLifecycleDates`), và đây là con số khi họ
+ * không chọn, nên hạn dự phòng ở đường Admin và hạn của bài tạo qua API không thể lệch nhau.
+ * Mọi loại khác giữ 3 tháng của CHỐT-05/CHỐT-07.
  *
  * Giai đoạn mở rộng **không cần cột trạng thái mới**: nó chính là khoảng giữa
  * `selection_deadline` và `expires_at`. Thêm một cờ `IS_EXTENDED` là thêm một
@@ -93,6 +96,8 @@ export function postExpiryDateFor(
   postType: PostTypes,
   publishedAt: Date,
 ): Date {
+  if (postType === PostTypes.WANTED)
+    return addDays(publishedAt, DefaultWantedAvailableDays);
   return usesSelectionLifecycle(postType)
     ? addDays(publishedAt, SelectionWindowDays + ExtensionWindowDays)
     : postExpiryDate(publishedAt);
@@ -100,6 +105,40 @@ export function postExpiryDateFor(
 
 /** Số lần một bài được phép gia hạn (CHỐT-07). */
 export const PostMaxRenewals = 1;
+
+/**
+ * Thời gian tồn tại người đăng bài `WANTED` tự chọn (16/11), tính bằng ngày từ lúc đăng.
+ *
+ * Thay vòng đời 7 + 30 ngày của CHỐT-10 cho riêng `WANTED`: không gửi thì 30 ngày — tức
+ * bài Muốn Nhận mặc định sống 30 ngày chứ không còn 37.
+ */
+export const MinWantedAvailableDays = 1;
+export const MaxWantedAvailableDays = 30;
+export const DefaultWantedAvailableDays = 30;
+
+/**
+ * Hai mốc của bài `WANTED` theo `availableDay`.
+ *
+ * - `expiresAt` = lúc đăng + `availableDay` ngày. KHÔNG còn 30 ngày tự mở thêm — người đăng
+ *   đã nói bài sống bao lâu.
+ * - `selectionDeadline` = lúc đăng + `min(7, availableDay − 1)` ngày: luôn sớm hơn `expiresAt`
+ *   ít nhất MỘT ngày. Hai mốc trùng nhau thì job hết hạn (đổi bài sang `EXPIRED`) và job tự
+ *   chọn (chỉ xét bài `PUBLISHED`) chạy trước sau tuỳ may — bài còn người xin có thể chết mà
+ *   không ai được chọn. `availableDay = 1` vì thế cho hạn xét = lúc đăng: lượt chạy kế tiếp
+ *   của job tự chọn là chọn.
+ */
+export function wantedLifecycleDates(
+  publishedAt: Date,
+  availableDay: number,
+): { selectionDeadline: Date; expiresAt: Date } {
+  return {
+    selectionDeadline: addDays(
+      publishedAt,
+      Math.min(SelectionWindowDays, availableDay - 1),
+    ),
+    expiresAt: addDays(publishedAt, availableDay),
+  };
+}
 
 /**
  * Cộng thêm tháng mà KHÔNG để ngày tràn sang tháng sau.

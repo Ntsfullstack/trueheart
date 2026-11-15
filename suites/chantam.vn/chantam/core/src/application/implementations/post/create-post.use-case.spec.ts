@@ -13,6 +13,7 @@ import {
 } from '@/domain/ports/repository';
 import {
   ContactVisibilities,
+  DeliveryMethods,
   GenericMvpPostTypes,
   GiftPostConditions,
   GiftPostStatuses,
@@ -578,11 +579,12 @@ describe('CreatePostUseCase · đồng hồ 7 + 30 ngày (CHỐT-10)', () => {
     expect(days(saved.expiresAt)).toBe(37);
   });
 
-  it('WANTED cũng nhận hạn xét ngay lúc đăng, và cũng 37 ngày', async () => {
+  it('WANTED nhận hạn xét ngay lúc đăng; không gửi availableDay thì sống 30 ngày (16/11)', async () => {
     // Bản trước khẳng định `selectionDeadline` là `null` và hạn sống > 80 ngày,
     // đúng với trạng thái lúc đó: vai chưa đảo nên bật `WANTED` là để job dựng
     // giao dịch với người cần đồ làm người tặng. Vai nay suy từ
-    // `giftTransactionRoles`, nên `WANTED` đi cùng vòng đời với `OFFER`.
+    // `giftTransactionRoles`, nên `WANTED` có hạn xét như `OFFER`. Từ 16/11 hạn sống
+    // của `WANTED` là `availableDay` (mặc định 30), không còn 7 + 30.
     const deps = makeDeps();
 
     await run(deps, postOfType(PostTypes.WANTED));
@@ -590,7 +592,7 @@ describe('CreatePostUseCase · đồng hồ 7 + 30 ngày (CHỐT-10)', () => {
     const saved = deps.posts.createPostWithinQuota.mock.calls[0][2];
     expect(saved.selectionDeadline).toBeInstanceOf(Date);
     expect(days(saved.selectionDeadline as Date)).toBe(7);
-    expect(days(saved.expiresAt)).toBe(37);
+    expect(days(saved.expiresAt)).toBe(30);
   });
 
   it('WANTED NHẬN được selectionMode — không còn là cái núm không làm gì', async () => {
@@ -720,7 +722,7 @@ describe('CreatePostUseCase · điều kiện cho/nhận `requirements` (15/11)'
 
     await run(deps, { postType: PostTypes.WANTED });
 
-    expect(saved(deps)).toEqual({ requirements: null });
+    expect(saved(deps)).toEqual({ requirements: null, availableDay: 30 });
   });
 
   it('WANTED gửi chuỗi chỉ toàn khoảng trắng thì lưu null', async () => {
@@ -728,7 +730,7 @@ describe('CreatePostUseCase · điều kiện cho/nhận `requirements` (15/11)'
 
     await run(deps, { postType: PostTypes.WANTED, requirements: '    ' });
 
-    expect(saved(deps)).toEqual({ requirements: null });
+    expect(saved(deps)).toEqual({ requirements: null, availableDay: 30 });
   });
 
   it('loại bài khác OFFER/WANTED gửi requirements thì bị từ chối', async () => {
@@ -741,5 +743,160 @@ describe('CreatePostUseCase · điều kiện cho/nhận `requirements` (15/11)'
       }),
     ).rejects.toThrow('requirements chỉ áp dụng cho bài OFFER và WANTED');
     expect(deps.posts.createPostWithinQuota).not.toHaveBeenCalled();
+  });
+});
+
+describe('CreatePostUseCase · phí ship và thời gian tồn tại WANTED (16/11)', () => {
+  interface ISaved {
+    details: Record<string, unknown>;
+    expiresAt: Date;
+    selectionDeadline: Date | null;
+    shippingFee: number | null;
+  }
+
+  function makeDeps() {
+    return {
+      posts: {
+        createPostWithinQuota: jest.fn(
+          async (_authorId: string, _quota: number, _post: ISaved) => true,
+        ),
+        findOneByOrFail: jest.fn(async () => ({ globalId: 'post' })),
+      },
+      categories: {
+        findOneBy: jest.fn(async () => makeCategory()),
+        findAncestorChain: jest.fn(async () => [
+          { categoryId: CategoryId, isActive: true },
+        ]),
+      },
+      users: {
+        findOneBy: jest.fn(async () => makeUser({ rank: UserRanks.MEMBER })),
+      },
+      entitlements: {
+        getCapability: jest.fn(async () => ({ allowed: true, limit: 3 })),
+      },
+    };
+  }
+
+  function run(
+    deps: ReturnType<typeof makeDeps>,
+    post: Record<string, unknown>,
+  ) {
+    return new CreatePostUseCase(
+      deps.posts as never,
+      deps.categories as never,
+      deps.entitlements as never,
+      new ProfileGate(deps.users as never),
+    ).handle({
+      userId: UserId,
+      post: {
+        title: 'Cần áo ấm cho bé',
+        description: 'Bé 5 tuổi cần áo ấm mùa đông.',
+        categoryId: CategoryId,
+        location: { lat: 10.7724, lng: 106.698 },
+        areaLabel: 'Quận 1, TP.HCM',
+        ...post,
+      },
+    } as never);
+  }
+
+  const saved = (deps: ReturnType<typeof makeDeps>) =>
+    deps.posts.createPostWithinQuota.mock.calls[0][2];
+  const daysAfter = (later: Date, earlier: Date) =>
+    Math.round((later.getTime() - earlier.getTime()) / (24 * 3_600_000));
+
+  it('shippingFee với GIVER_SHIPS thì được lưu', async () => {
+    const deps = makeDeps();
+    await run(deps, {
+      postType: PostTypes.OFFER,
+      condition: GiftPostConditions.USED,
+      estimatedValue: 100_000,
+      deliveryMethod: DeliveryMethods.GIVER_SHIPS,
+      shippingFee: 30_000,
+    });
+    expect(saved(deps).shippingFee).toBe(30_000);
+  });
+
+  it('không gửi shippingFee thì lưu null', async () => {
+    const deps = makeDeps();
+    await run(deps, { postType: PostTypes.WANTED });
+    expect(saved(deps).shippingFee).toBeNull();
+  });
+
+  it.each([DeliveryMethods.SELF_PICKUP, undefined])(
+    'shippingFee với deliveryMethod %p -> 400, không ghi',
+    async (deliveryMethod) => {
+      const deps = makeDeps();
+      await expect(
+        run(deps, {
+          postType: PostTypes.WANTED,
+          deliveryMethod,
+          shippingFee: 30_000,
+        }),
+      ).rejects.toThrow(
+        'shippingFee chỉ khai được khi deliveryMethod là GIVER_SHIPS',
+      );
+      expect(deps.posts.createPostWithinQuota).not.toHaveBeenCalled();
+    },
+  );
+
+  it('[RF3] WANTED không gửi availableDay -> sống 30 ngày, hạn xét 7 ngày, details ghi 30', async () => {
+    const deps = makeDeps();
+    const before = new Date();
+    await run(deps, { postType: PostTypes.WANTED });
+
+    const post = saved(deps);
+    expect(post.details).toEqual({ requirements: null, availableDay: 30 });
+    expect(daysAfter(post.expiresAt, before)).toBe(30);
+    expect(daysAfter(post.selectionDeadline as Date, before)).toBe(7);
+  });
+
+  it('[RF2] WANTED availableDay 1 -> hạn xét ngay lúc đăng, hết hạn sau 1 ngày', async () => {
+    const deps = makeDeps();
+    const before = new Date();
+    await run(deps, { postType: PostTypes.WANTED, availableDay: 1 });
+
+    const post = saved(deps);
+    expect(post.details.availableDay).toBe(1);
+    expect(daysAfter(post.expiresAt, before)).toBe(1);
+    expect(daysAfter(post.selectionDeadline as Date, before)).toBe(0);
+    expect(post.selectionDeadline!.getTime()).toBeLessThan(
+      post.expiresAt.getTime(),
+    );
+  });
+
+  it.each([0, 31, 2.5])(
+    'WANTED availableDay %p -> 400',
+    async (availableDay) => {
+      const deps = makeDeps();
+      await expect(
+        run(deps, { postType: PostTypes.WANTED, availableDay }),
+      ).rejects.toThrow(ValidationFailedException);
+    },
+  );
+
+  it('OFFER gửi availableDay -> 400', async () => {
+    const deps = makeDeps();
+    await expect(
+      run(deps, {
+        postType: PostTypes.OFFER,
+        condition: GiftPostConditions.USED,
+        estimatedValue: 100_000,
+        availableDay: 10,
+      }),
+    ).rejects.toThrow('availableDay chỉ áp dụng cho bài WANTED');
+  });
+
+  it('[RF5] OFFER vẫn 7 + 30 ngày, details không có availableDay', async () => {
+    const deps = makeDeps();
+    const before = new Date();
+    await run(deps, {
+      postType: PostTypes.OFFER,
+      condition: GiftPostConditions.USED,
+      estimatedValue: 100_000,
+    });
+
+    const post = saved(deps);
+    expect(post.details).not.toHaveProperty('availableDay');
+    expect(daysAfter(post.expiresAt, before)).toBe(37);
   });
 });

@@ -39,6 +39,11 @@ export interface IPost {
    * `GIVER_SHIPS` — tự đến lấy thì không có phí để mà trả.
    */
   shipPayer: ShipPayers | null;
+  /**
+   * Phí ship (VND) người đăng khai (16/11). Chỉ có khi `deliveryMethod = GIVER_SHIPS` — tự
+   * đến lấy thì không có phí. Chỉ là con số tham khảo; hệ thống không xử lý thanh toán.
+   */
+  shippingFee: number | null;
   /** Yêu cầu chuyển vật phẩm về điểm từ thiện, chờ Admin duyệt (F23). */
   charityTransferStatus: CharityTransferStatuses | null;
   charityTransferRequestedAt: Date | null;
@@ -86,3 +91,9 @@ export function normalizePostRequirements(
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
+
+/**
+ * Trần phí ship khai được (VND). Không phải giá thị trường — chỉ để chặn một con số gõ
+ * thừa vài số 0 hiện thẳng lên bài. Cùng trần với CHECK `CHK_posts_shipping_fee_range`.
+ */
+export const MaxShippingFee = 10_000_000;

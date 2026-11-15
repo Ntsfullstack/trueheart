@@ -1,5 +1,7 @@
 import { PostTypes } from '../consts';
+import * as lifecycle from './post-lifecycle';
 import {
+  DefaultWantedAvailableDays,
   ExtensionWindowDays,
   PostLifetimeMonths,
   addMonthsClamped,
@@ -124,14 +126,16 @@ describe('vòng đời 7 + 30 ngày của CHỐT-10', () => {
     expect(usesSelectionLifecycle(PostTypes.OFFER)).toBe(true);
   });
 
-  it('WANTED cũng 37 ngày, và cũng đúng bằng hạn xét + 30', () => {
+  it('WANTED mặc định 30 ngày từ 16/11 — không còn 7 + 30', () => {
+    // Hạn dự phòng (Admin duyệt một bài chưa có hạn) phải cùng con số với bài tạo qua API
+    // không gửi `availableDay`, nếu không bài Muốn xin có hai thời hạn tuỳ đường vào.
     expect(postExpiryDateFor(PostTypes.WANTED, publishedAt).toISOString()).toBe(
-      '2026-11-17T09:30:00.000Z',
+      '2026-11-10T09:30:00.000Z',
     );
     expect(
       postExpiryDateFor(PostTypes.WANTED, publishedAt).getTime() -
-        selectionDeadlineFrom(publishedAt).getTime(),
-    ).toBe(ExtensionWindowDays * 24 * 60 * 60 * 1000);
+        publishedAt.getTime(),
+    ).toBe(DefaultWantedAvailableDays * 24 * 60 * 60 * 1000);
   });
 
   it('không sửa vào Date được truyền vào', () => {
@@ -140,4 +144,33 @@ describe('vòng đời 7 + 30 ngày của CHỐT-10', () => {
     postExpiryDateFor(PostTypes.OFFER, original);
     expect(original.toISOString()).toBe('2026-10-11T09:30:00.000Z');
   });
+});
+
+describe('vòng đời bài WANTED theo availableDay (16/11)', () => {
+  const publishedAt = new Date('2026-11-16T00:00:00.000Z');
+  const days = (date: Date) =>
+    (date.getTime() - publishedAt.getTime()) / (24 * 60 * 60 * 1000);
+
+  it('mặc định 30 ngày, trần 30, sàn 1', () => {
+    expect(lifecycle.DefaultWantedAvailableDays).toBe(30);
+    expect(lifecycle.MaxWantedAvailableDays).toBe(30);
+    expect(lifecycle.MinWantedAvailableDays).toBe(1);
+  });
+
+  it.each([
+    [30, 7, 30],
+    [8, 7, 8],
+    [7, 6, 7],
+    [2, 1, 2],
+    // [RF2] Hạn xét luôn trước hạn sống ít nhất một ngày — trùng nhau thì job hết hạn có
+    // thể chạy trước job tự chọn và bài còn người xin chết mà không ai được chọn.
+    [1, 0, 1],
+  ])(
+    'availableDay %p -> hạn xét +%p ngày, hết hạn +%p ngày',
+    (available, selection, expiry) => {
+      const dates = lifecycle.wantedLifecycleDates(publishedAt, available);
+      expect(days(dates.selectionDeadline)).toBe(selection);
+      expect(days(dates.expiresAt)).toBe(expiry);
+    },
+  );
 });

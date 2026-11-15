@@ -25,12 +25,16 @@ import {
 } from '@chantam.vn/chantam.core-lib/consts';
 import {
   classifiedPricingGaps,
+  DefaultWantedAvailableDays,
+  MaxWantedAvailableDays,
+  MinWantedAvailableDays,
   normalizePostRequirements,
   postExpiryDateFor,
   PostTypesWithRequirements,
   resolveQuotaLimit,
   selectionDeadlineFrom,
   usesSelectionLifecycle,
+  wantedLifecycleDates,
 } from '@chantam.vn/chantam.core-lib/models';
 import { ValidationFailedException } from '@chantam/service.common-lib/exception';
 import { makeGlobalId, slugify } from '@chantam/service.common-lib/utils';
@@ -54,11 +58,12 @@ function buildPostDetails(
       requirements: normalizePostRequirements(post.requirements) ?? null,
     };
 
-  // Bài Muốn xin chỉ có điều kiện nhận (15/11). Khoá luôn có mặt, `null` khi không khai —
-  // cùng lý do với `marketPrice` bên dưới.
+  // Bài Muốn xin: điều kiện nhận (15/11) và thời gian tồn tại người đăng chọn (16/11). Khoá
+  // luôn có mặt — cùng lý do với `marketPrice` bên dưới.
   if (post.postType === PostTypes.WANTED)
     return {
       requirements: normalizePostRequirements(post.requirements) ?? null,
+      availableDay: post.availableDay ?? DefaultWantedAvailableDays,
     };
 
   if (post.postType === PostTypes.CLASSIFIED)
@@ -190,6 +195,33 @@ export class CreatePostUseCase implements ICreatePostUseCase {
       throw new ValidationFailedException([
         'shipPayer chỉ khai được khi deliveryMethod là GIVER_SHIPS',
       ]);
+    // Phí ship cùng luật với bên chịu phí (16/11); CHECK `CHK_posts_shipping_fee_delivery`
+    // canh ở database, chặn ở đây để trả 400 nói đúng chuyện.
+    if (
+      post.shippingFee != null &&
+      post.deliveryMethod !== DeliveryMethods.GIVER_SHIPS
+    )
+      throw new ValidationFailedException([
+        'shippingFee chỉ khai được khi deliveryMethod là GIVER_SHIPS',
+      ]);
+
+    // Thời gian tồn tại chỉ người đăng bài Muốn xin chọn (16/11). Kiểm lại khoảng ở đây dù DTO
+    // đã kiểm: đây là thứ quyết định `expires_at`, và một lối gọi không qua DTO không được
+    // tạo ra bài sống 0 ngày hay 300 ngày.
+    if (post.availableDay !== undefined) {
+      if (post.postType !== PostTypes.WANTED)
+        throw new ValidationFailedException([
+          'availableDay chỉ áp dụng cho bài WANTED',
+        ]);
+      if (
+        !Number.isInteger(post.availableDay) ||
+        post.availableDay < MinWantedAvailableDays ||
+        post.availableDay > MaxWantedAvailableDays
+      )
+        throw new ValidationFailedException([
+          `availableDay phải là số nguyên từ ${MinWantedAvailableDays} tới ${MaxWantedAvailableDays}`,
+        ]);
+    }
 
     // `selectionMode` vẫn chỉ áp cho `OFFER`. CHỐT-10 muốn cả `WANTED`, nhưng
     // nhận cờ đó cho `WANTED` bây giờ là tạo một cái núm KHÔNG LÀM GÌ — hoặc tệ
@@ -231,6 +263,15 @@ export class CreatePostUseCase implements ICreatePostUseCase {
     // đúng bằng `selection_deadline + 30 ngày`, và phép kiểm nào so hai cột đó sẽ
     // đỏ theo kiểu không lặp lại được.
     const publishedAt = new Date();
+    // Bài Muốn xin sống đúng `availableDay` ngày (16/11); `OFFER` giữ 7 + 30 ngày của
+    // CHỐT-10; loại khác 3 tháng. Hai mốc tính từ CÙNG một `publishedAt`.
+    const wantedDates =
+      post.postType === PostTypes.WANTED
+        ? wantedLifecycleDates(
+            publishedAt,
+            post.availableDay ?? DefaultWantedAvailableDays,
+          )
+        : null;
     const created = await this.postRepository.createPostWithinQuota(
       command.userId,
       quota,
@@ -251,9 +292,11 @@ export class CreatePostUseCase implements ICreatePostUseCase {
         totalQuantity,
         remainingQuantity: totalQuantity,
         details: buildPostDetails(post),
-        // `OFFER`/`WANTED`: 37 ngày (7 xét + 30 mở rộng, CHỐT-10). Loại khác giữ
-        // 3 tháng của CHỐT-05/07.
-        expiresAt: postExpiryDateFor(post.postType, publishedAt),
+        // `OFFER`: 37 ngày (7 xét + 30 mở rộng, CHỐT-10). `WANTED`: `availableDay` ngày.
+        // Loại khác giữ 3 tháng của CHỐT-05/07.
+        expiresAt:
+          wantedDates?.expiresAt ??
+          postExpiryDateFor(post.postType, publishedAt),
         renewedCount: 0,
         reactionCount: 0,
         commentCount: 0,
@@ -261,6 +304,7 @@ export class CreatePostUseCase implements ICreatePostUseCase {
         isSos,
         deliveryMethod: post.deliveryMethod ?? null,
         shipPayer: post.shipPayer ?? null,
+        shippingFee: post.shippingFee ?? null,
         charityTransferStatus: null,
         charityTransferRequestedAt: null,
         charityTransferNote: null,
@@ -269,9 +313,11 @@ export class CreatePostUseCase implements ICreatePostUseCase {
         // khi có phản hồi đầu tiên — nên một bài không ai xin thì đồng hồ không
         // bao giờ chạy, không bao giờ vào giai đoạn mở rộng, và chỉ chết ở mốc ba
         // tháng. Đó đúng là thứ CHỐT-10 sửa.
-        selectionDeadline: usesSelectionLifecycle(post.postType)
-          ? selectionDeadlineFrom(publishedAt)
-          : null,
+        selectionDeadline: wantedDates
+          ? wantedDates.selectionDeadline
+          : usesSelectionLifecycle(post.postType)
+            ? selectionDeadlineFrom(publishedAt)
+            : null,
         deletedAt: null,
       },
     );

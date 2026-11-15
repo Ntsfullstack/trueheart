@@ -13,8 +13,12 @@ import {
 } from '@chantam.vn/chantam.core-lib/dto';
 import { IPostEntity } from '@chantam.vn/chantam.core-lib/entities';
 import {
+  DefaultWantedAvailableDays,
   MaxClassifiedPrice,
   MaxPostRequirementsLength,
+  MaxShippingFee,
+  MaxWantedAvailableDays,
+  MinWantedAvailableDays,
 } from '@chantam.vn/chantam.core-lib/models';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -178,6 +182,34 @@ export class CreatePostDto implements ICreatePostDto {
   @IsOptional()
   @IsEnum(ShipPayers)
   shipPayer?: ShipPayers;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: MaxShippingFee,
+    example: 30_000,
+    description:
+      'Phí ship (VND, số nguyên). Chỉ khai được khi deliveryMethod là GIVER_SHIPS — khác đi là 400. Chỉ là con số tham khảo; hệ thống không xử lý thanh toán.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(MaxShippingFee)
+  shippingFee?: number;
+
+  @ApiPropertyOptional({
+    minimum: MinWantedAvailableDays,
+    maximum: MaxWantedAvailableDays,
+    default: DefaultWantedAvailableDays,
+    description:
+      'Chỉ bài WANTED: số ngày bài tồn tại kể từ lúc đăng (1–30, mặc định 30). Bài hết hạn sau đúng số ngày này, không tự mở thêm; hạn xét chọn = min(7, availableDay − 1) ngày. Loại bài khác gửi lên là 400. Trả lại ở `post.details.availableDay` (bài đăng trước 16/11 không có khoá này).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(MinWantedAvailableDays)
+  @Max(MaxWantedAvailableDays)
+  availableDay?: number;
 
   @ApiPropertyOptional({
     enum: PostSelectionModes,

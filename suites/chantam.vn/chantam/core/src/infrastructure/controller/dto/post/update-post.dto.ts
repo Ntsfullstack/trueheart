@@ -13,6 +13,7 @@ import { IPostEntity } from '@chantam.vn/chantam.core-lib/entities';
 import {
   MaxClassifiedPrice,
   MaxPostRequirementsLength,
+  MaxShippingFee,
 } from '@chantam.vn/chantam.core-lib/models';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -62,6 +63,28 @@ export class UpdatePostDto implements IUpdatePostDto {
   @IsOptional()
   @IsEnum(ShipPayers)
   shipPayer?: ShipPayers | null;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: MaxShippingFee,
+    nullable: true,
+    description:
+      'Phí ship (VND). Chỉ khi hình thức (sau khi sửa) là GIVER_SHIPS. `null` = xoá; đổi sang hình thức khác thì tự xoá.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(MaxShippingFee)
+  shippingFee?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'KHÔNG sửa được sau khi tạo — gửi lên là 400. Khai ở đây chỉ để request tới được tầng kiểm thay vì bị `whitelist` lặng lẽ bỏ đi.',
+  })
+  @IsOptional()
+  @IsInt()
+  availableDay?: number;
 
   @ApiPropertyOptional({ minimum: 0, maximum: MaxClassifiedPrice })
   @ValidateIf((_post, value) => value !== undefined)

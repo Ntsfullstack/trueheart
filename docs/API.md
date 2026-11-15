@@ -400,6 +400,7 @@ Lưu trong `details` (JSONB). Mỗi loại chỉ mang đúng trường của mì
 | --- | --- | --- |
 | `OFFER` | `condition`, `estimatedValue`, `totalQuantity` | Không |
 | `OFFER`, `WANTED` | `requirements` (điều kiện cho/nhận, chuỗi ≤ 500 ký tự) | Không — không gửi thì lưu `null` |
+| `WANTED` | `availableDay` (thời gian tồn tại, số ngày 1–30, từ 16/11) | Không — mặc định `30`; loại khác gửi thì `400` |
 | `CLASSIFIED` | `price` (VND), `condition` | **Có** |
 | `CLASSIFIED` | `negotiable` | Không — mặc định `false` |
 | `CLASSIFIED` | `marketPrice` (VND, giá thị trường tham khảo) | Không |
@@ -427,6 +428,8 @@ cắt khoảng trắng hai đầu, chuỗi trắng lưu thành `null`. Loại b�
 
 Hạn xét = **lúc đăng + 7 ngày**, đặt ngay khi bài lên công khai và cho cả `INSTANT`. Trước 11/10 nó chỉ được đặt khi có phản hồi đầu tiên, nên bài không ai xin thì không bao giờ tới hạn. Bài `OFFER` vì thế sống **37 ngày** (7 + 30) thay vì ba tháng.
 
+**Bài `WANTED` từ 16/11 sống đúng `availableDay` ngày** (1–30, mặc định 30) kể từ lúc đăng — không còn 30 ngày tự mở thêm. Hạn xét = lúc đăng + `min(7, availableDay − 1)` ngày, tức luôn sớm hơn hạn sống ít nhất một ngày để job tự chọn kịp chạy trước job hết hạn (`availableDay = 1` thì được tự chọn ở lượt chạy kế tiếp). Giá trị trả lại ở `post.details.availableDay` — bài `WANTED` đăng trước 16/11 không có khoá này (coi như hạn cũ, xem `expiresAt`); chỉ đặt lúc tạo — `PATCH` gửi `availableDay` là `400`. Hạn dự phòng khi Admin duyệt một bài `WANTED` chưa có hạn cũng là 30 ngày. Bài `WANTED` không nhận thông báo nhắc sắp hết hạn (`POST_EXPIRING_SOON`) — người đăng đã tự chọn thời hạn, lời mời gia hạn ba tháng sẽ phá lựa chọn đó.
+
 **Áp cho cả `OFFER` và `WANTED` từ 11/10.** Với bài Muốn Nhận hai vai **đảo lại**: tác giả là người **nhận**, người phản hồi là người **cho** — một lời tặng cho bài `WANTED` chính là một hàng `gift_requests` mà `requester_id` là người sẽ đưa món đồ.
 
 Vai do backend phân giải từ loại bài (`giftTransactionRoles`), không nhận từ client. `GET /transactions` vì thế luôn hiện đúng ai cho ai nhận, và điểm hoàn tất trả đúng người.
@@ -443,6 +446,7 @@ Bài `WANTED` đăng TRƯỚC 11/10 giữ hạn sống ba tháng đã hứa; ch�
 | --- | --- | --- |
 | `deliveryMethod` | `SELF_PICKUP` \| `GIVER_SHIPS` | Tùy chọn |
 | `shipPayer` | `GIVER` \| `RECEIVER` | Chỉ hợp lệ khi `deliveryMethod = GIVER_SHIPS`, khác đi thì `400` |
+| `shippingFee` | số nguyên VND, `0`–`10.000.000` | Từ 16/11. Chỉ hợp lệ khi `deliveryMethod = GIVER_SHIPS`, khác đi thì `400`. Trả lại ở `post.shippingFee` |
 
 Chỉ là **dấu hiệu** ghi ai lẽ ra trả phí — hệ thống không xử lý tiền ship (COD bên ngoài).
 Nó là căn cứ cho `POST /transactions/:id/reports/ship-unpaid` ở §10.
@@ -491,6 +495,8 @@ theo loại. `postType`, `status`, `authorId` và hạn đăng vẫn do server g
 | `estimatedValue` | `OFFER` | — |
 | `condition` | `OFFER` và `CLASSIFIED` | — |
 | `requirements` | `OFFER` và `WANTED` | Bỏ trống = giữ nguyên; `null` hoặc chuỗi trắng = xoá; ≤ 500 ký tự |
+| `shippingFee` | mọi loại có `deliveryMethod` | Chỉ khi hình thức (sau khi sửa) là `GIVER_SHIPS`; `null` = xoá; đổi sang hình thức khác thì tự về `null` |
+| `availableDay` | — | KHÔNG sửa được sau khi tạo — gửi lên là `400` |
 | `categoryId` | mọi loại | Danh mục phải tồn tại và đang bật, nếu không `CATEGORY_NOT_FOUND` |
 | `isSos` | mọi loại | Bật lên cần quyền `POST_SOS`, nếu không `POST_SOS_NOT_ALLOWED` |
 

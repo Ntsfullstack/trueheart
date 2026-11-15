@@ -37,6 +37,7 @@ function makePost(): IPostEntity {
     isSos: false,
     deliveryMethod: null,
     shipPayer: null,
+    shippingFee: null,
     charityTransferStatus: null,
     charityTransferRequestedAt: null,
     charityTransferNote: null,

@@ -321,6 +321,7 @@ phần dữ liệu riêng của từng loại nằm trong `details` (jsonb).
 | `charity_transfer_requested_at` / `charity_transfer_note` | `timestamptz` / `varchar(500)` NULL | `CHK_posts_charity_transfer_pairing`: status và requested_at cùng NULL hoặc cùng có. `UQ_posts_charity_transfer_open` — mỗi bài tối đa một đề nghị đang `REQUESTED` |
 | `delivery_method` | `posts_delivery_method_enum` NULL | `SELF_PICKUP` · `GIVER_SHIPS` (`1791100000000`) |
 | `ship_payer` | `posts_ship_payer_enum` NULL | `GIVER` · `RECEIVER`. `CHK_posts_ship_payer_needs_shipping`: chỉ khai khi `GIVER_SHIPS` |
+| `shipping_fee` | `integer` NULL | Phí ship VND (`1803500000000`, 16/11). `CHK_posts_shipping_fee_range` 0–10.000.000; `CHK_posts_shipping_fee_delivery`: chỉ khai khi `GIVER_SHIPS` |
 | `reaction_count` / `comment_count` / `share_count` | `integer` mặc định `0` | Bộ đếm denormalized từ `content_reactions` / `content_comments` / `content_shares`. `CHK_posts_interaction_counters`: cả ba `>= 0`. (`like_count` cũ đã bị xoá ở `1794600000000`) |
 | `share_code` | `varchar(16)` NOT NULL UNIQUE | Mã chia sẻ 10 ký tự, không tuần tự (25/10). **Postgres sinh** bằng `DEFAULT gen_post_share_code()`, nên mọi lối INSERT có mã mà không phải nêu cột; kiểu tạo bài ở ứng dụng `Omit` trường này |
 

@@ -140,6 +140,15 @@ export class PostEntity
   })
   shipPayer: ShipPayers | null;
 
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Phí ship (VND) người đăng khai. Chỉ có khi deliveryMethod là GIVER_SHIPS. Chỉ là con số tham khảo — hệ thống không xử lý thanh toán.',
+  })
+  @Column({ name: 'shipping_fee', type: 'int', nullable: true })
+  shippingFee: number | null;
+
   @ApiProperty({ enum: CharityTransferStatuses, nullable: true })
   @Column({
     name: 'charity_transfer_status',

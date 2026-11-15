@@ -233,6 +233,31 @@ async function main(): Promise<void> {
       String(expiring[0]?.daysLeft),
     );
 
+    // Bài Muốn Nhận KHÔNG được nhắc (16/11): người đăng tự chọn `availableDay`, và lời nhắc
+    // "gia hạn thêm ba tháng" là mời họ phá chính thời hạn vừa chọn.
+    const WantedPostId = '77777777-7777-4777-8777-77777777aaaa';
+    await dataSource.query(
+      `INSERT INTO posts
+         (global_id, post_type, author_id, category_id, title, description,
+          location, area_label, status, total_quantity, remaining_quantity,
+          details, renewed_count, expires_at)
+       VALUES ($1, 'WANTED', $2, $3, 'Bài Muốn Nhận sắp hết hạn',
+               'Mô tả đủ dài cho bài kiểm tra',
+               ST_SetSRID(ST_MakePoint(106.698, 10.7724), 4326)::geography,
+               'Quận 1', 'PUBLISHED', 1, 1, '{"availableDay": 3}'::jsonb, 0,
+               now() + interval '2 days')`,
+      [WantedPostId, UserId, CategoryId],
+    );
+    check(
+      'bài WANTED sắp hết hạn thì KHÔNG nhắc gia hạn',
+      !(
+        await posts.findPostsExpiringSoon({ withinDays: 7, limit: 100 })
+      ).some((row) => row.postId === WantedPostId),
+    );
+    await dataSource.query(`DELETE FROM posts WHERE global_id = $1`, [
+      WantedPostId,
+    ]);
+
     // Bài đã QUÁ hạn thì không nhắc: nhắc gia hạn lúc đó là mời người ta bấm
     // một nút sắp hết tác dụng.
     await dataSource.query(

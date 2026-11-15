@@ -255,6 +255,7 @@ export class PostRepository
         isSos: post.isSos,
         deliveryMethod: post.deliveryMethod,
         shipPayer: post.shipPayer,
+        shippingFee: post.shippingFee,
       });
       await manager.query(
         `INSERT INTO admin_audit_logs
@@ -857,6 +858,10 @@ export class PostRepository
         WHERE status = 'PUBLISHED'
           AND deleted_at IS NULL
           AND expires_at IS NOT NULL
+          -- Bài Muốn Nhận không được nhắc (16/11): người đăng TỰ chọn thời hạn
+          -- (availableDay), và lời mời "gia hạn ba tháng" là mời họ phá chính lựa
+          -- chọn đó — với availableDay <= 7 thì lời nhắc tới ngay sau khi đăng.
+          AND post_type <> 'WANTED'
           -- Chưa hết hạn: bài đã quá hạn thì post:expire lo, nhắc gia hạn lúc
           -- đó là mời người ta bấm một nút sắp hết tác dụng.
           AND expires_at > now()

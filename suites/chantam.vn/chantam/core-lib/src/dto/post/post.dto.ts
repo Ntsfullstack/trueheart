@@ -60,6 +60,10 @@ export interface ICreatePostCommonDto {
    * `GIVER_SHIPS` — tự đến lấy thì không có phí để mà trả.
    */
   shipPayer?: ShipPayers;
+  /**
+   * Phí ship (VND, ≥ 0) — chỉ khai được khi `deliveryMethod` là `GIVER_SHIPS` (16/11).
+   */
+  shippingFee?: number | null;
 }
 
 export interface ICreateOfferPostDto extends ICreatePostCommonDto {
@@ -105,6 +109,11 @@ export interface ICreatePostDto extends ICreatePostCommonDto {
    * WANTED. Lưu ở `details.requirements`; chuỗi trắng = `null`.
    */
   requirements?: string | null;
+  /**
+   * Thời gian tồn tại (ngày) của bài WANTED, 1–30, mặc định 30 (16/11). Lưu ở
+   * `details.availableDay`; chỉ đặt lúc tạo.
+   */
+  availableDay?: number;
 }
 
 export interface ICreatePostBodyDto {
@@ -564,6 +573,10 @@ export interface IUpdatePostDto {
   isSos?: boolean;
   deliveryMethod?: DeliveryMethods | null;
   shipPayer?: ShipPayers | null;
+  /** Phí ship (VND). `null` = xoá; đổi sang hình thức khác `GIVER_SHIPS` thì tự xoá. */
+  shippingFee?: number | null;
+  /** Không sửa được sau khi tạo — gửi lên là 400 (16/11). */
+  availableDay?: number;
   price?: number;
   /** Giá thị trường tự khai (CHỐT-05). Gửi `null` để xoá con số đã khai. */
   marketPrice?: number | null;
