@@ -20,8 +20,8 @@
 
 ## FE Admin cần cập nhật trong cùng đợt nghiệm thu
 
-1. Nguyên tắc duyệt: **Admin duyệt chiến dịch**, không tạo thêm một quy trình duyệt banner độc lập. Chiến dịch mới hoặc chiến dịch gửi lại sau chỉnh sửa phải ở trạng thái chờ duyệt; chỉ chiến dịch được Admin duyệt mới được công khai.
-2. Nếu chủ chiến dịch chọn đề xuất lên trang chủ, yêu cầu quảng bá phải đi kèm hồ sơ chiến dịch để Admin xem ngay trong màn duyệt chiến dịch. Khi chấp thuận, Admin cấu hình vị trí banner, thứ tự ưu tiên và thời gian hiển thị; chiến dịch bị từ chối hoặc bị thu hồi thì banner không được hiển thị.
+1. **Luồng duyệt chiến dịch:** chiến dịch mới hoặc chiến dịch gửi lại sau chỉnh sửa phải ở trạng thái chờ duyệt; chỉ chiến dịch được Admin duyệt mới được công khai. Đây là nghiệp vụ duyệt nội dung và tính hợp lệ của chiến dịch.
+2. **Luồng duyệt đề xuất banner:** là yêu cầu độc lập với duyệt chiến dịch. Khi chủ chiến dịch chọn đề xuất lên trang chủ, yêu cầu phải xuất hiện trong màn quản lý banner để Admin duyệt riêng, cấu hình vị trí, thứ tự ưu tiên và thời gian hiển thị. Chiến dịch được duyệt không đồng nghĩa banner tự động được duyệt; banner chỉ hiển thị khi cả chiến dịch đang hợp lệ và đề xuất banner đã được chấp thuận.
 3. Form tạo/sửa chiến dịch có hai trường:
    - Số người tham gia tối thiểu.
    - Hạng tối thiểu để được đăng ký tham gia.
@@ -33,8 +33,9 @@
 ## Tiêu chí nghiệm thu
 
 - Mobile/Admin đọc được cùng một giá trị điều kiện từ backend.
-- Chiến dịch chưa được Admin duyệt không xuất hiện công khai và không sinh banner trên trang chủ.
-- Đề xuất lên trang chủ được xử lý trong lần Admin duyệt chiến dịch; không phát sinh hàng chờ duyệt banner riêng.
+- Chiến dịch chưa được Admin duyệt không xuất hiện công khai.
+- Đề xuất banner có hàng chờ và trạng thái duyệt riêng trong FE Admin.
+- Duyệt chiến dịch và duyệt banner là hai quyết định độc lập; chỉ banner đã duyệt của chiến dịch còn hợp lệ mới được hiển thị.
 - Người chưa đủ hạng không thể đăng ký bằng cách gọi API trực tiếp.
 - Người đủ hạng đăng ký vào đúng trạng thái `REGISTERED`, không tự động được check-in hay hoàn thành.
 - Chiến dịch cũ sau migration giữ hành vi cũ: `minimumParticipants = 0`, `minimumParticipantRank = null`.
