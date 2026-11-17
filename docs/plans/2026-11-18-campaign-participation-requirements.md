@@ -20,17 +20,21 @@
 
 ## FE Admin cần cập nhật trong cùng đợt nghiệm thu
 
-1. Form tạo/sửa chiến dịch có hai trường:
+1. Nguyên tắc duyệt: **Admin duyệt chiến dịch**, không tạo thêm một quy trình duyệt banner độc lập. Chiến dịch mới hoặc chiến dịch gửi lại sau chỉnh sửa phải ở trạng thái chờ duyệt; chỉ chiến dịch được Admin duyệt mới được công khai.
+2. Nếu chủ chiến dịch chọn đề xuất lên trang chủ, yêu cầu quảng bá phải đi kèm hồ sơ chiến dịch để Admin xem ngay trong màn duyệt chiến dịch. Khi chấp thuận, Admin cấu hình vị trí banner, thứ tự ưu tiên và thời gian hiển thị; chiến dịch bị từ chối hoặc bị thu hồi thì banner không được hiển thị.
+3. Form tạo/sửa chiến dịch có hai trường:
    - Số người tham gia tối thiểu.
    - Hạng tối thiểu để được đăng ký tham gia.
-2. Màn chi tiết/duyệt chiến dịch hiển thị rõ hai điều kiện này.
-3. Màn quản lý participant hiển thị hạng hiện tại, điều kiện hạng của chiến dịch và lý do không đủ điều kiện.
-4. Màn tổng kết hiển thị `số thực tế / số tối thiểu`, nhưng không cho Admin tự sửa số thực tế.
-5. FE Admin dùng enum/contract backend trả về, không tự suy quyền hoặc so sánh chuỗi tên hạng.
+4. Màn chi tiết/duyệt chiến dịch hiển thị rõ hai điều kiện này và thông tin đề xuất lên trang chủ.
+5. Màn quản lý participant hiển thị hạng hiện tại, điều kiện hạng của chiến dịch và lý do không đủ điều kiện.
+6. Màn tổng kết hiển thị `số thực tế / số tối thiểu`, nhưng không cho Admin tự sửa số thực tế.
+7. FE Admin dùng enum/contract backend trả về, không tự suy quyền hoặc so sánh chuỗi tên hạng.
 
 ## Tiêu chí nghiệm thu
 
 - Mobile/Admin đọc được cùng một giá trị điều kiện từ backend.
+- Chiến dịch chưa được Admin duyệt không xuất hiện công khai và không sinh banner trên trang chủ.
+- Đề xuất lên trang chủ được xử lý trong lần Admin duyệt chiến dịch; không phát sinh hàng chờ duyệt banner riêng.
 - Người chưa đủ hạng không thể đăng ký bằng cách gọi API trực tiếp.
 - Người đủ hạng đăng ký vào đúng trạng thái `REGISTERED`, không tự động được check-in hay hoàn thành.
 - Chiến dịch cũ sau migration giữ hành vi cũ: `minimumParticipants = 0`, `minimumParticipantRank = null`.
